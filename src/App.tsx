@@ -912,7 +912,7 @@ export default function App() {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden min-h-[600px] flex flex-col relative">
         <header className="bg-indigo-600 text-white p-4 flex justify-between items-center shadow-md z-10">
           <h1 className="font-fredoka text-xl font-bold flex items-center gap-2">
-            <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Kids Word Learning
+            <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Fun with Words
           </h1>
           <button 
             onClick={handleAdminToggle}
