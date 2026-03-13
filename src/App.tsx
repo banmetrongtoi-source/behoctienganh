@@ -23,7 +23,9 @@ import {
   ChevronLeft,
   Edit2,
   Loader2,
-  Info
+  Info,
+  Settings,
+  Turtle
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
@@ -83,20 +85,6 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   return new Error(error instanceof Error ? error.message : "Lỗi phân quyền hoặc kết nối database");
-};
-
-const speakText = (text: string) => {
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const englishVoice = voices.find(v => v.lang.startsWith("en-US") || v.lang.startsWith("en_US") || v.lang.startsWith("en-GB"));
-    if (englishVoice) utterance.voice = englishVoice;
-    utterance.lang = "en-US";
-    utterance.rate = 0.8;
-    utterance.pitch = 1.1;
-    window.speechSynthesis.speak(utterance);
-  }
 };
 
 const getAIFeedback = async (target: string, recognized: string) => {
@@ -215,8 +203,57 @@ export default function App() {
   const [lessonTitle, setLessonTitle] = useState("");
   const [lessonData, setLessonData] = useState("");
   const [modal, setModal] = useState<{ title: string; message: string; type: "success" | "warning" | "info" | "error"; onConfirm?: () => void } | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => localStorage.getItem("selectedVoiceURI") || "");
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
 
   const recognitionRef = useRef<any>(null);
+
+  const updateVoices = () => {
+    const allVoices = window.speechSynthesis.getVoices();
+    const enVoices = allVoices.filter(v => v.lang.startsWith("en-"));
+    setVoices(enVoices);
+    
+    // Auto-select first English voice if none selected
+    if (!selectedVoiceURI && enVoices.length > 0) {
+      const defaultVoice = enVoices.find(v => v.lang === "en-US") || enVoices[0];
+      setSelectedVoiceURI(defaultVoice.voiceURI);
+    }
+  };
+
+  const speakText = (text: string, isSlow: boolean = false) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const allVoices = window.speechSynthesis.getVoices();
+      const voice = allVoices.find(v => v.voiceURI === selectedVoiceURI);
+      
+      if (voice) {
+        utterance.voice = voice;
+      } else {
+        const englishVoice = allVoices.find(v => v.lang.startsWith("en-US") || v.lang.startsWith("en_US") || v.lang.startsWith("en-GB"));
+        if (englishVoice) utterance.voice = englishVoice;
+      }
+
+      utterance.lang = "en-US";
+      utterance.rate = isSlow ? 0.4 : 0.8;
+      utterance.pitch = 1.1;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  useEffect(() => {
+    updateVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedVoiceURI) {
+      localStorage.setItem("selectedVoiceURI", selectedVoiceURI);
+    }
+  }, [selectedVoiceURI]);
 
   useEffect(() => {
     // Test connection
@@ -271,7 +308,7 @@ export default function App() {
   };
 
   const handleVerifyPass = () => {
-    if (passInput === "1234") {
+    if (passInput === "091132") {
       setIsAdmin(true);
       localStorage.setItem("isAdmin", "true");
       setShowPassModal(false);
@@ -438,7 +475,16 @@ export default function App() {
   const renderSetup = () => (
     <div className="flex flex-col p-4">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-fredoka font-bold text-indigo-600">Chọn bài học</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-fredoka font-bold text-indigo-600">Chọn bài học</h2>
+          <button 
+            onClick={() => setShowVoiceSettings(true)}
+            className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+            title="Cài đặt giọng đọc"
+          >
+            <Settings className="w-6 h-6" />
+          </button>
+        </div>
         {isAdmin && (
           <button 
             onClick={() => { setEditingLessonId(null); setLessonTitle(""); setLessonData(""); setScreen("create"); }}
@@ -584,12 +630,21 @@ export default function App() {
             </h4>
             {item.phonetic && <p className="text-[10px] text-indigo-500 font-medium mb-0.5 text-center">{item.phonetic}</p>}
             {item.meaning && <p className="text-xs text-slate-500 font-bold mb-1 text-center">{item.meaning}</p>}
-            <button 
-              onClick={() => speakText(item.word)}
-              className="mt-2 w-full bg-indigo-50 text-indigo-600 py-2 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-sm flex items-center justify-center gap-1 active:scale-95"
-            >
-              <Volume2 className="w-4 h-4" /> Nghe
-            </button>
+            <div className="mt-2 flex gap-1 w-full">
+              <button 
+                onClick={() => speakText(item.word)}
+                className="flex-1 bg-indigo-50 text-indigo-600 py-2 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-xs flex items-center justify-center gap-1 active:scale-95"
+              >
+                <Volume2 className="w-3.5 h-3.5" /> Nghe
+              </button>
+              <button 
+                onClick={() => speakText(item.word, true)}
+                className="bg-amber-50 text-amber-600 p-2 rounded-xl font-bold hover:bg-amber-100 transition-colors text-xs flex items-center justify-center active:scale-95"
+                title="Đọc chậm"
+              >
+                <Turtle className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -678,12 +733,22 @@ export default function App() {
             </p>
           )}
           
-          <button 
-            onClick={() => speakText(wordObj.word)}
-            className="text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 p-3 rounded-full transition-colors mt-2 mb-6 shadow-sm active:scale-90"
-          >
-            <Volume2 className="w-8 h-8" />
-          </button>
+          <div className="flex items-center gap-3 mt-2 mb-6">
+            <button 
+              onClick={() => speakText(wordObj.word)}
+              className="text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 p-4 rounded-full transition-colors shadow-sm active:scale-90"
+              title="Nghe bình thường"
+            >
+              <Volume2 className="w-8 h-8" />
+            </button>
+            <button 
+              onClick={() => speakText(wordObj.word, true)}
+              className="text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 p-4 rounded-full transition-colors shadow-sm active:scale-90"
+              title="Đọc chậm"
+            >
+              <Turtle className="w-8 h-8" />
+            </button>
+          </div>
 
           <div className="mt-auto relative w-full flex justify-center pb-4">
             {isListening && (
@@ -748,6 +813,75 @@ export default function App() {
       >
         <ArrowLeft className="inline-block mr-2 w-6 h-6" /> Quay lại bài học
       </button>
+    </div>
+  );
+
+  const renderVoiceSettings = () => (
+    <div className="fixed inset-0 bg-slate-900/40 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
+      >
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+          <h3 className="text-xl font-fredoka font-bold text-indigo-900 flex items-center gap-2">
+            <Volume2 className="w-6 h-6" /> Giọng đọc
+          </h3>
+          <button onClick={() => setShowVoiceSettings(false)} className="text-slate-400 hover:text-slate-600">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+        
+        <div className="p-4 overflow-y-auto flex-1">
+          <p className="text-sm text-slate-500 mb-4 px-2">Chọn giọng đọc tiếng Anh bé thích nhất:</p>
+          <div className="flex flex-col gap-2">
+            {voices.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 italic">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 opacity-20" />
+                Đang tải danh sách...
+              </div>
+            ) : (
+              voices.map(voice => (
+                <button
+                  key={voice.voiceURI}
+                  onClick={() => {
+                    setSelectedVoiceURI(voice.voiceURI);
+                    setTimeout(() => {
+                      window.speechSynthesis.cancel();
+                      const utterance = new SpeechSynthesisUtterance("Hello, I am your new teacher!");
+                      utterance.voice = voice;
+                      utterance.lang = "en-US";
+                      utterance.rate = 0.8;
+                      window.speechSynthesis.speak(utterance);
+                    }, 100);
+                  }}
+                  className={`w-full p-4 rounded-2xl text-left transition-all border-2 flex items-center justify-between ${
+                    selectedVoiceURI === voice.voiceURI 
+                    ? "border-indigo-600 bg-indigo-50 text-indigo-700" 
+                    : "border-slate-100 hover:border-indigo-200 text-slate-600"
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-bold text-sm">{voice.name}</span>
+                    <span className="text-[10px] opacity-60 uppercase tracking-wider">{voice.lang}</span>
+                  </div>
+                  {selectedVoiceURI === voice.voiceURI && <Star className="w-5 h-5 fill-indigo-600 text-indigo-600" />}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+        
+        <div className="p-6 bg-slate-50 border-t border-slate-100">
+          <button 
+            onClick={() => setShowVoiceSettings(false)}
+            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg active:scale-95"
+          >
+            Xong rồi!
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 
@@ -840,6 +974,7 @@ export default function App() {
 
       {/* MODAL MẬT KHẨU ADMIN */}
       <AnimatePresence>
+        {showVoiceSettings && renderVoiceSettings()}
         {showPassModal && (
           <div className="fixed inset-0 bg-slate-900/40 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
             <motion.div 
@@ -853,7 +988,7 @@ export default function App() {
                   <Shield className="w-8 h-8" />
                 </div>
                 <h3 className="text-2xl font-fredoka font-bold text-slate-800 mb-2">Xác nhận Admin</h3>
-                <p className="text-slate-600 font-medium text-sm">Vui lòng nhập mật khẩu để chỉnh sửa (Mặc định: 1234)</p>
+                <p className="text-slate-600 font-medium text-sm">Vui lòng nhập mật khẩu để chỉnh sửa</p>
               </div>
               
               <input 
