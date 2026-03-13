@@ -20,6 +20,7 @@ import {
   Home, 
   BookOpen, 
   ChevronRight,
+  Edit2,
   Loader2,
   Info
 } from "lucide-react";
@@ -35,11 +36,53 @@ import {
   query, 
   orderBy 
 } from "firebase/firestore";
-import { signInAnonymously, onAuthStateChanged, User } from "firebase/auth";
+import { 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  User
+} from "firebase/auth";
+import { getDocFromServer } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { Lesson, Word, Screen } from "./types";
 
 // --- HELPERS ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+  }
+}
+
+const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email || undefined,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  return new Error(error instanceof Error ? error.message : "Lỗi phân quyền hoặc kết nối database");
+};
+
 const speakText = (text: string) => {
   if ("speechSynthesis" in window) {
     window.speechSynthesis.cancel();
@@ -104,7 +147,11 @@ export default function App() {
   const [currentLesson, setCurrentLesson] = useState<Lesson | null>(null);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [score, setScore] = useState(0);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return localStorage.getItem("isAdmin") === "true";
+  });
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [passInput, setPassInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [micStatus, setMicStatus] = useState("Bấm mic để đọc");
@@ -117,6 +164,18 @@ export default function App() {
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
+    // Test connection
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'lessons', 'connection-test'));
+      } catch (error: any) {
+        if (error.message?.includes('the client is offline')) {
+          console.error("Firebase connection error: Client is offline. Check config.");
+        }
+      }
+    };
+    testConnection();
+
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
@@ -145,46 +204,96 @@ export default function App() {
     };
   }, []);
 
+  const handleAdminToggle = () => {
+    if (isAdmin) {
+      setIsAdmin(false);
+      localStorage.setItem("isAdmin", "false");
+      showModal("Thông báo", "Đã thoát chế độ chỉnh sửa.", "info");
+    } else {
+      setPassInput("");
+      setShowPassModal(true);
+    }
+  };
+
+  const handleVerifyPass = () => {
+    if (passInput === "1234") {
+      setIsAdmin(true);
+      localStorage.setItem("isAdmin", "true");
+      setShowPassModal(false);
+      showModal("Thành công", "Chào mừng Admin! Bạn có thể thêm/sửa/xóa bài học.", "success");
+    } else {
+      showModal("Lỗi", "Mật khẩu không đúng!", "error");
+    }
+  };
+
   const handleSaveLesson = async () => {
+    let currentUser = user;
+    if (!currentUser) {
+      try {
+        const cred = await signInAnonymously(auth);
+        currentUser = cred.user;
+        setUser(currentUser);
+      } catch (e) {
+        console.warn("Auth initialization failed, attempting save anyway...", e);
+        // We don't block here anymore because rules are relaxed for lessons
+      }
+    }
+
     if (!lessonTitle.trim()) return showModal("Thiếu thông tin", "Vui lòng nhập tên bài học!", "warning");
     const words = parseImportText(lessonData);
-    if (words.length === 0) return showModal("Lỗi định dạng", "Không đọc được từ vựng nào!", "error");
+    if (words.length === 0) return showModal("Lỗi định dạng", "Vui lòng nhập từ vựng theo đúng định dạng!", "error");
 
     setLoading(true);
+    const path = "lessons";
     try {
       if (editingLessonId) {
-        const docRef = doc(db, "lessons", editingLessonId);
+        const docRef = doc(db, path, editingLessonId);
         await updateDoc(docRef, {
           title: lessonTitle,
           words: words,
           updatedAt: serverTimestamp()
         });
-        showModal("Thành công!", "Đã cập nhật bài học thành công 🎉", "success", () => setScreen("setup"));
+        showModal("Thành công!", "Đã cập nhật bài học thành công 🎉", "success", () => {
+          setScreen("setup");
+          setEditingLessonId(null);
+        });
       } else {
-        await addDoc(collection(db, "lessons"), {
+        await addDoc(collection(db, path), {
           title: lessonTitle,
           words: words,
-          creatorId: user?.uid || "anonymous",
+          creatorId: currentUser?.uid || "anonymous",
           createdAt: serverTimestamp()
         });
-        showModal("Thành công!", "Đã tạo bài học mới thành công 🎉", "success", () => setScreen("setup"));
+        showModal("Thành công!", "Đã tạo bài học mới thành công 🎉", "success", () => {
+          setScreen("setup");
+          setEditingLessonId(null);
+        });
       }
     } catch (error: any) {
-      showModal("Lỗi", "Không thể lưu bài học: " + error.message, "error");
+      console.error("Save Error:", error);
+      const enhancedError = handleFirestoreError(error, editingLessonId ? OperationType.UPDATE : OperationType.CREATE, path);
+      showModal("Lỗi lưu bài học", enhancedError.message, "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteLesson = async () => {
-    if (!editingLessonId) return;
+  const handleDeleteLesson = async (id?: string) => {
+    const targetId = id || editingLessonId;
+    if (!targetId) return;
+    
     showModal("Xác nhận Xóa", "Bạn có chắc chắn muốn xóa bài học này?", "warning", async () => {
       setLoading(true);
+      const path = "lessons";
       try {
-        await deleteDoc(doc(db, "lessons", editingLessonId));
-        showModal("Đã xóa", "Bài học đã được xóa thành công!", "success", () => setScreen("setup"));
+        await deleteDoc(doc(db, path, targetId));
+        showModal("Đã xóa", "Bài học đã được xóa thành công!", "success", () => {
+          setScreen("setup");
+          setEditingLessonId(null);
+        });
       } catch (error: any) {
-        showModal("Lỗi", "Không thể xóa bài học: " + error.message, "error");
+        const enhancedError = handleFirestoreError(error, OperationType.DELETE, path);
+        showModal("Lỗi", enhancedError.message, "error");
       } finally {
         setLoading(false);
       }
@@ -306,18 +415,31 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2">
                 {isAdmin && (
-                  <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      setEditingLessonId(lesson.id!); 
-                      setLessonTitle(lesson.title); 
-                      setLessonData(lesson.words.map(w => `${w.word}\n${w.image}`).join("\n\n"));
-                      setScreen("create"); 
-                    }}
-                    className="p-2 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors"
-                  >
-                    <Star className="w-5 h-5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setEditingLessonId(lesson.id!); 
+                        setLessonTitle(lesson.title); 
+                        setLessonData(lesson.words.map(w => `${w.word}\n${w.image}`).join("\n\n"));
+                        setScreen("create"); 
+                      }}
+                      className="p-2 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors"
+                      title="Sửa"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        handleDeleteLesson(lesson.id);
+                      }}
+                      className="p-2 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 transition-colors"
+                      title="Xóa"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 )}
                 <ChevronRight className="text-slate-300 group-hover:text-indigo-600 transition-colors" />
               </div>
@@ -531,11 +653,11 @@ export default function App() {
             <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Bé Đọc Từ Vựng
           </h1>
           <button 
-            onClick={() => setIsAdmin(!isAdmin)}
-            className={`p-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isAdmin ? "text-amber-400 bg-indigo-800/50" : "text-indigo-200 bg-indigo-800/30"}`}
+            onClick={handleAdminToggle}
+            className={`p-2 px-4 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-inner ${isAdmin ? "text-amber-400 bg-indigo-800" : "text-indigo-100 bg-indigo-700 hover:bg-indigo-800"}`}
           >
-            <Shield className="w-5 h-5" />
-            <span className="hidden sm:inline">{isAdmin ? "Admin" : "User"}</span>
+            <Shield className={`w-5 h-5 ${isAdmin ? "animate-pulse" : ""}`} />
+            <span>{isAdmin ? "Chế độ Sửa" : "Admin"}</span>
           </button>
         </header>
 
@@ -596,6 +718,53 @@ export default function App() {
                   className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-md ${modal.type === "success" ? "bg-emerald-500 hover:bg-emerald-600" : modal.type === "error" ? "bg-red-500 hover:bg-red-600" : modal.type === "warning" ? "bg-amber-500 hover:bg-amber-600" : "bg-indigo-600 hover:bg-indigo-700"}`}
                 >
                   Đồng ý
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL MẬT KHẨU ADMIN */}
+      <AnimatePresence>
+        {showPassModal && (
+          <div className="fixed inset-0 bg-slate-900/40 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl"
+            >
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-fredoka font-bold text-slate-800 mb-2">Xác nhận Admin</h3>
+                <p className="text-slate-600 font-medium text-sm">Vui lòng nhập mật khẩu để chỉnh sửa (Mặc định: 1234)</p>
+              </div>
+              
+              <input 
+                type="password"
+                value={passInput}
+                onChange={(e) => setPassInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyPass()}
+                placeholder="Mật khẩu..."
+                autoFocus
+                className="w-full border-2 border-indigo-100 rounded-xl p-3 mb-6 focus:outline-none focus:border-indigo-600 text-center font-bold tracking-widest text-xl"
+              />
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowPassModal(false)}
+                  className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button 
+                  onClick={handleVerifyPass}
+                  className="flex-1 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition-colors"
+                >
+                  Xác nhận
                 </button>
               </div>
             </motion.div>
