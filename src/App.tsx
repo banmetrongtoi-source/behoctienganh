@@ -129,8 +129,12 @@ const parseImportText = (text: string): Word[] => {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const isImageUrl = line.startsWith("http://") || line.startsWith("https://") || line.startsWith("data:image/");
+    const isPhonetic = line.startsWith("/") || line.startsWith("[");
+    
     if (isImageUrl) {
       if (parsed.length > 0) parsed[parsed.length - 1].image = line;
+    } else if (isPhonetic) {
+      if (parsed.length > 0) parsed[parsed.length - 1].phonetic = line;
     } else {
       const defaultImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
       parsed.push({ word: line, image: defaultImage });
@@ -422,7 +426,7 @@ export default function App() {
                         e.stopPropagation(); 
                         setEditingLessonId(lesson.id!); 
                         setLessonTitle(lesson.title); 
-                        setLessonData(lesson.words.map(w => `${w.word}\n${w.image}`).join("\n\n"));
+                        setLessonData(lesson.words.map(w => `${w.word}${w.phonetic ? `\n${w.phonetic}` : ""}\n${w.image}`).join("\n\n"));
                         setScreen("create"); 
                       }}
                       className="p-2 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors"
@@ -482,13 +486,13 @@ export default function App() {
         <div className="flex-1 flex flex-col">
           <label className="block font-bold text-slate-700 mb-1">
             Nhập nhanh từ vựng <br />
-            <span className="text-xs font-normal text-slate-500">(Dòng 1: Từ, Dòng 2: Link Ảnh, Dòng 3: Bỏ trống)</span>
+            <span className="text-xs font-normal text-slate-500">(Dòng 1: Từ, Dòng 2: Phiên âm (bắt đầu bằng /), Dòng 3: Link Ảnh)</span>
           </label>
           <textarea 
             value={lessonData}
             onChange={(e) => setLessonData(e.target.value)}
             className="w-full flex-1 border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors text-sm font-mono whitespace-pre min-h-[200px]" 
-            placeholder="apple&#10;https://images.unsplash.com/photo-1560806887-1e4cd0b6faa6?w=200&#10;&#10;dog&#10;https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=200"
+            placeholder="apple&#10;/ˈæp.əl/&#10;https://images.unsplash.com/photo-1560806887-1e4cd0b6faa6?w=200&#10;&#10;dog&#10;/dɒɡ/&#10;https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=200"
           />
         </div>
 
@@ -523,6 +527,7 @@ export default function App() {
               <img src={item.image} alt={item.word} className="w-full h-full object-cover" />
             </div>
             <h4 className="font-bold text-slate-800 capitalize w-full text-center truncate">{item.word}</h4>
+            {item.phonetic && <p className="text-xs text-indigo-500 font-medium mb-1">{item.phonetic}</p>}
             <button 
               onClick={() => speakText(item.word)}
               className="mt-2 w-full bg-indigo-50 text-indigo-600 py-2 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-sm flex items-center justify-center gap-1 active:scale-95"
@@ -606,6 +611,11 @@ export default function App() {
           <h2 className="text-5xl font-fredoka font-bold text-slate-800 mb-2 uppercase tracking-wide">
             {wordObj.word}
           </h2>
+          {wordObj.phonetic && (
+            <p className="text-xl font-medium text-indigo-500 mb-4 bg-indigo-50 px-4 py-1 rounded-full">
+              {wordObj.phonetic}
+            </p>
+          )}
           
           <button 
             onClick={() => speakText(wordObj.word)}
