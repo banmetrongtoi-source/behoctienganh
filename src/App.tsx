@@ -123,6 +123,19 @@ const getSimilarityPercent = (s1: string, s2: string) => {
   return ((longer.length - costs[shorter.length]) / longer.length) * 100;
 };
 
+const getDynamicFontSize = (text: string, isGame: boolean = false) => {
+  const len = text.length;
+  if (isGame) {
+    if (len > 25) return "text-2xl";
+    if (len > 15) return "text-3xl";
+    if (len > 10) return "text-4xl";
+    return "text-5xl";
+  } else {
+    if (len > 15) return "text-xs";
+    return "text-sm";
+  }
+};
+
 const parseImportText = (text: string): Word[] => {
   const lines = text.split("\n").map(l => l.trim()).filter(l => l !== "");
   const parsed: Word[] = [];
@@ -526,8 +539,10 @@ export default function App() {
             <div className="w-full aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2">
               <img src={item.image} alt={item.word} className="w-full h-full object-cover" />
             </div>
-            <h4 className="font-bold text-slate-800 capitalize w-full text-center truncate">{item.word}</h4>
-            {item.phonetic && <p className="text-xs text-indigo-500 font-medium mb-1">{item.phonetic}</p>}
+            <h4 className={`font-bold text-slate-800 capitalize w-full text-center break-words leading-tight ${getDynamicFontSize(item.word)}`}>
+              {item.word}
+            </h4>
+            {item.phonetic && <p className="text-[10px] text-indigo-500 font-medium mb-1 text-center">{item.phonetic}</p>}
             <button 
               onClick={() => speakText(item.word)}
               className="mt-2 w-full bg-indigo-50 text-indigo-600 py-2 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-sm flex items-center justify-center gap-1 active:scale-95"
@@ -608,11 +623,11 @@ export default function App() {
             <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover" />
           </div>
 
-          <h2 className="text-5xl font-fredoka font-bold text-slate-800 mb-2 uppercase tracking-wide">
+          <h2 className={`font-fredoka font-bold text-slate-800 mb-2 uppercase tracking-wide text-center px-4 break-words leading-tight ${getDynamicFontSize(wordObj.word, true)}`}>
             {wordObj.word}
           </h2>
           {wordObj.phonetic && (
-            <p className="text-xl font-medium text-indigo-500 mb-4 bg-indigo-50 px-4 py-1 rounded-full">
+            <p className="text-lg font-medium text-indigo-500 mb-4 bg-indigo-50 px-4 py-1 rounded-full text-center">
               {wordObj.phonetic}
             </p>
           )}
