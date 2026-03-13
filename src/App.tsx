@@ -20,6 +20,7 @@ import {
   Home, 
   BookOpen, 
   ChevronRight,
+  ChevronLeft,
   Edit2,
   Loader2,
   Info
@@ -543,6 +544,30 @@ export default function App() {
     </div>
   );
 
+  const handleNextWord = () => {
+    if (!currentLesson) return;
+    if (currentWordIndex < currentLesson.words.length - 1) {
+      const nextIndex = currentWordIndex + 1;
+      setCurrentWordIndex(nextIndex);
+      setFeedback(null);
+      setMicStatus("Nhấn mic để đọc");
+      setTimeout(() => speakText(currentLesson.words[nextIndex].word), 300);
+    } else {
+      setScreen("victory");
+    }
+  };
+
+  const handlePrevWord = () => {
+    if (!currentLesson) return;
+    if (currentWordIndex > 0) {
+      const prevIndex = currentWordIndex - 1;
+      setCurrentWordIndex(prevIndex);
+      setFeedback(null);
+      setMicStatus("Nhấn mic để đọc");
+      setTimeout(() => speakText(currentLesson.words[prevIndex].word), 300);
+    }
+  };
+
   const renderGame = () => {
     if (!currentLesson) return null;
     const wordObj = currentLesson.words[currentWordIndex];
@@ -550,7 +575,7 @@ export default function App() {
     return (
       <div className="flex flex-col p-4 h-full bg-slate-50 transition-colors duration-300">
         <div className="flex justify-between items-center mb-4">
-          <button onClick={() => showModal("Dừng học?", "Bé có muốn quay lại sảnh không?", "warning", () => setScreen("setup"))} className="text-slate-400 hover:text-slate-600">
+          <button onClick={() => showModal("Dừng học?", "Bé có muốn quay lại trang bài học không?", "warning", () => setScreen("preview"))} className="text-slate-400 hover:text-slate-600">
             <X className="w-8 h-8" />
           </button>
           <div className="bg-white px-4 py-1.5 rounded-full shadow-sm font-bold text-indigo-600 border border-indigo-100">
@@ -608,6 +633,23 @@ export default function App() {
           </div>
           
           <p className="text-slate-500 font-medium text-sm mt-2">{micStatus}</p>
+
+          {/* NÚT ĐIỀU HƯỚNG */}
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-2 pointer-events-none">
+            <button 
+              onClick={handlePrevWord}
+              disabled={currentWordIndex === 0}
+              className={`w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-all pointer-events-auto ${currentWordIndex === 0 ? "bg-slate-100 text-slate-300 cursor-not-allowed" : "bg-white text-indigo-600 hover:bg-indigo-50 active:scale-90"}`}
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+            <button 
+              onClick={handleNextWord}
+              className="w-12 h-12 rounded-full bg-white text-indigo-600 flex items-center justify-center shadow-md hover:bg-indigo-50 transition-all active:scale-90 pointer-events-auto"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -630,10 +672,10 @@ export default function App() {
       </div>
 
       <button 
-        onClick={() => setScreen("setup")}
+        onClick={() => setScreen("preview")}
         className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-xl hover:bg-indigo-700 transition-all shadow-[0_4px_0_rgb(67,56,202)] active:shadow-[0_0px_0_rgb(67,56,202)] active:translate-y-1"
       >
-        <Home className="inline-block mr-2 w-6 h-6" /> Quay lại sảnh
+        <ArrowLeft className="inline-block mr-2 w-6 h-6" /> Quay lại bài học
       </button>
     </div>
   );
