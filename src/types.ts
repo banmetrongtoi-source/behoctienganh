@@ -3,6 +3,7 @@ import { Timestamp } from "firebase/firestore";
 export interface Word {
   word: string;
   phonetic?: string;
+  meaning?: string;
   image: string;
 }
 

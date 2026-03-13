@@ -26,6 +26,7 @@ import {
   Info
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import { GoogleGenAI } from "@google/genai";
 import { 
   collection, 
   addDoc, 
@@ -98,6 +99,22 @@ const speakText = (text: string) => {
   }
 };
 
+const getAIFeedback = async (target: string, recognized: string) => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `So sánh phát âm từ tiếng Anh "${target}" với kết quả nhận diện được là "${recognized}". 
+      Hãy đưa ra lời khuyên cực kỳ ngắn gọn (dưới 12 từ) bằng tiếng Việt cho trẻ em để sửa lỗi phát âm này và nhắc bé đọc lại. 
+      Ví dụ: "Bé gần đúng rồi, chú ý âm 's' ở cuối và đọc lại nhé!" hoặc "Bé đọc rõ âm 'l' hơn rồi thử lại nha".`,
+    });
+    return response.text || "Bé đọc lại lần nữa nhé! 💪";
+  } catch (e) {
+    console.error("AI Feedback Error:", e);
+    return "Bé đọc lại lần nữa nhé! 💪";
+  }
+};
+
 const getSimilarityPercent = (s1: string, s2: string) => {
   if (s1 === s2) return 100;
   if (s1.length === 0 || s2.length === 0) return 0;
@@ -137,20 +154,40 @@ const getDynamicFontSize = (text: string, isGame: boolean = false) => {
 };
 
 const parseImportText = (text: string): Word[] => {
-  const lines = text.split("\n").map(l => l.trim()).filter(l => l !== "");
+  const lines = text.split("\n").map(l => l.trim());
   const parsed: Word[] = [];
+  let currentWord: Word | null = null;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (!line) {
+      currentWord = null;
+      continue;
+    }
+
     const isImageUrl = line.startsWith("http://") || line.startsWith("https://") || line.startsWith("data:image/");
     const isPhonetic = line.startsWith("/") || line.startsWith("[");
-    
+
     if (isImageUrl) {
-      if (parsed.length > 0) parsed[parsed.length - 1].image = line;
+      if (currentWord) currentWord.image = line;
     } else if (isPhonetic) {
-      if (parsed.length > 0) parsed[parsed.length - 1].phonetic = line;
+      if (currentWord) currentWord.phonetic = line;
     } else {
-      const defaultImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
-      parsed.push({ word: line, image: defaultImage });
+      if (!currentWord) {
+        currentWord = {
+          word: line,
+          image: `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`
+        };
+        parsed.push(currentWord);
+      } else if (!currentWord.meaning) {
+        currentWord.meaning = line;
+      } else {
+        currentWord = {
+          word: line,
+          image: `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`
+        };
+        parsed.push(currentWord);
+      }
     }
   }
   return parsed;
@@ -356,14 +393,14 @@ export default function App() {
     recognition.start();
   };
 
-  const checkPronunciation = (recognized: string) => {
+  const checkPronunciation = async (recognized: string) => {
     if (!currentLesson) return;
     const target = currentLesson.words[currentWordIndex].word;
     const cleanTarget = target.toLowerCase().replace(/[^a-z0-9]/g, "");
     const cleanRecognized = recognized.toLowerCase().replace(/[^a-z0-9]/g, "");
     const sim = getSimilarityPercent(cleanTarget, cleanRecognized);
 
-    if (sim >= 80 || cleanRecognized.includes(cleanTarget)) {
+    if (sim >= 85 || cleanRecognized.includes(cleanTarget)) {
       setScore(s => s + 1);
       setFeedback({ text: "Giỏi quá! 🎉", type: "success" });
       setMicStatus(`Bé nói: "${recognized}"`);
@@ -378,10 +415,13 @@ export default function App() {
         }
       }, 1500);
     } else {
-      setFeedback({ text: "Thử lại nhé! 🤔", type: "warning" });
+      setMicStatus("Đang phân tích lỗi...");
+      const aiTip = await getAIFeedback(target, recognized);
+      setFeedback({ text: aiTip, type: "warning" });
       setMicStatus(`Bé nói: "${recognized}"`);
       speakText(target);
-      setTimeout(() => setFeedback(null), 2000);
+      // Giữ feedback lâu hơn để bé đọc kịp
+      setTimeout(() => setFeedback(null), 4000);
     }
   };
 
@@ -439,7 +479,7 @@ export default function App() {
                         e.stopPropagation(); 
                         setEditingLessonId(lesson.id!); 
                         setLessonTitle(lesson.title); 
-                        setLessonData(lesson.words.map(w => `${w.word}${w.phonetic ? `\n${w.phonetic}` : ""}\n${w.image}`).join("\n\n"));
+                        setLessonData(lesson.words.map(w => `${w.word}${w.phonetic ? `\n${w.phonetic}` : ""}${w.meaning ? `\n${w.meaning}` : ""}\n${w.image}`).join("\n\n"));
                         setScreen("create"); 
                       }}
                       className="p-2 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors"
@@ -499,13 +539,13 @@ export default function App() {
         <div className="flex-1 flex flex-col">
           <label className="block font-bold text-slate-700 mb-1">
             Nhập nhanh từ vựng <br />
-            <span className="text-xs font-normal text-slate-500">(Dòng 1: Từ, Dòng 2: Phiên âm (bắt đầu bằng /), Dòng 3: Link Ảnh)</span>
+            <span className="text-xs font-normal text-slate-500">(Dòng 1: Từ, Dòng 2: Phiên âm, Dòng 3: Nghĩa, Dòng 4: Link Ảnh)</span>
           </label>
           <textarea 
             value={lessonData}
             onChange={(e) => setLessonData(e.target.value)}
             className="w-full flex-1 border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors text-sm font-mono whitespace-pre min-h-[200px]" 
-            placeholder="apple&#10;/ˈæp.əl/&#10;https://images.unsplash.com/photo-1560806887-1e4cd0b6faa6?w=200&#10;&#10;dog&#10;/dɒɡ/&#10;https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=200"
+            placeholder="Apple&#10;/ˈæp.əl/&#10;Táo&#10;https://images.unsplash.com/photo-1560806887-1e4cd0b6faa6?w=200&#10;&#10;Banana&#10;/bəˈnɑː.nə/&#10;Chuối&#10;https://images.unsplash.com/photo-1571771894821-ad990241274d?w=200"
           />
         </div>
 
@@ -542,7 +582,8 @@ export default function App() {
             <h4 className={`font-bold text-slate-800 capitalize w-full text-center break-words leading-tight ${getDynamicFontSize(item.word)}`}>
               {item.word}
             </h4>
-            {item.phonetic && <p className="text-[10px] text-indigo-500 font-medium mb-1 text-center">{item.phonetic}</p>}
+            {item.phonetic && <p className="text-[10px] text-indigo-500 font-medium mb-0.5 text-center">{item.phonetic}</p>}
+            {item.meaning && <p className="text-xs text-slate-500 font-bold mb-1 text-center">{item.meaning}</p>}
             <button 
               onClick={() => speakText(item.word)}
               className="mt-2 w-full bg-indigo-50 text-indigo-600 py-2 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-sm flex items-center justify-center gap-1 active:scale-95"
@@ -610,11 +651,11 @@ export default function App() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="absolute top-4 left-0 w-full text-center z-10"
+                className="absolute top-4 left-0 w-full text-center z-10 px-4"
               >
-                <span className={`px-6 py-2 rounded-full font-bold text-lg shadow-md ${feedback.type === "success" ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>
+                <div className={`inline-block px-6 py-3 rounded-2xl font-bold text-base shadow-lg leading-tight ${feedback.type === "success" ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>
                   {feedback.text}
-                </span>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -623,12 +664,17 @@ export default function App() {
             <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover" />
           </div>
 
-          <h2 className={`font-fredoka font-bold text-slate-800 mb-2 uppercase tracking-wide text-center px-4 break-words leading-tight ${getDynamicFontSize(wordObj.word, true)}`}>
+          <h2 className={`font-fredoka font-bold text-slate-800 mb-1 uppercase tracking-wide text-center px-4 break-words leading-tight ${getDynamicFontSize(wordObj.word, true)}`}>
             {wordObj.word}
           </h2>
           {wordObj.phonetic && (
-            <p className="text-lg font-medium text-indigo-500 mb-4 bg-indigo-50 px-4 py-1 rounded-full text-center">
+            <p className="text-lg font-medium text-indigo-500 mb-1 bg-indigo-50 px-4 py-0.5 rounded-full text-center">
               {wordObj.phonetic}
+            </p>
+          )}
+          {wordObj.meaning && (
+            <p className="text-2xl font-bold text-pink-500 mb-4 text-center">
+              {wordObj.meaning}
             </p>
           )}
           
