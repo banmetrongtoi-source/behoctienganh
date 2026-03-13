@@ -1,5 +1,5 @@
 {
-  "name": "Bé Đọc Từ Vựng",
+  "name": "Kids Word Learning",
   "description": "Ứng dụng học từ vựng tiếng Anh tương tác dành cho bé với nhận diện giọng nói.",
   "requestFramePermissions": [
     "microphone"

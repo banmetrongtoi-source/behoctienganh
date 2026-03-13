@@ -475,14 +475,14 @@ export default function App() {
   const renderSetup = () => (
     <div className="flex flex-col p-4">
       <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col">
           <h2 className="text-2xl font-fredoka font-bold text-indigo-600">Chọn bài học</h2>
           <button 
             onClick={() => setShowVoiceSettings(true)}
-            className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
-            title="Cài đặt giọng đọc"
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors mt-0.5 group"
           >
-            <Settings className="w-6 h-6" />
+            <Settings className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" />
+            <span>Cài đặt giọng đọc cho bé</span>
           </button>
         </div>
         {isAdmin && (
@@ -493,6 +493,18 @@ export default function App() {
             <Plus className="inline-block mr-1 w-5 h-5" /> Tạo mới
           </button>
         )}
+      </div>
+
+      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 mb-6 flex items-start gap-3">
+        <div className="bg-amber-100 p-2 rounded-xl text-amber-600">
+          <Info className="w-5 h-5" />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-amber-800 mb-0.5">Mẹo cho Ba Mẹ:</p>
+          <p className="text-[11px] text-amber-700 leading-tight">
+            Ba mẹ hãy bấm vào <span className="font-bold">"Cài đặt giọng đọc cho bé"</span> phía trên để chọn giọng đọc tiếng Anh chuẩn nhất nhé!
+          </p>
+        </div>
       </div>
       
       <div className="flex flex-col gap-4">
@@ -825,9 +837,12 @@ export default function App() {
         className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
       >
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-          <h3 className="text-xl font-fredoka font-bold text-indigo-900 flex items-center gap-2">
-            <Volume2 className="w-6 h-6" /> Giọng đọc
-          </h3>
+          <div className="flex flex-col">
+            <h3 className="text-xl font-fredoka font-bold text-indigo-900 flex items-center gap-2">
+              <Volume2 className="w-6 h-6" /> Chọn giọng đọc
+            </h3>
+            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Dành cho Ba Mẹ</span>
+          </div>
           <button onClick={() => setShowVoiceSettings(false)} className="text-slate-400 hover:text-slate-600">
             <X className="w-6 h-6" />
           </button>
@@ -897,7 +912,7 @@ export default function App() {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden min-h-[600px] flex flex-col relative">
         <header className="bg-indigo-600 text-white p-4 flex justify-between items-center shadow-md z-10">
           <h1 className="font-fredoka text-xl font-bold flex items-center gap-2">
-            <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Bé Đọc Từ Vựng
+            <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Kids Word Learning
           </h1>
           <button 
             onClick={handleAdminToggle}
