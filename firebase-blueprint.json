@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "Lesson": {
+      "title": "Lesson",
+      "description": "A collection of vocabulary words for learning.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The name of the lesson."
+        },
+        "creatorId": {
+          "type": "string",
+          "description": "The UID of the user who created the lesson."
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "word": {
+                "type": "string",
+                "description": "The word to learn."
+              },
+              "image": {
+                "type": "string",
+                "description": "The URL of the image representing the word."
+              }
+            },
+            "required": ["word", "image"]
+          },
+          "description": "The list of words in the lesson."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the lesson was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the lesson was last updated."
+        }
+      },
+      "required": ["title", "words", "creatorId"]
+    }
+  },
+  "firestore": {
+    "/lessons/{lessonId}": {
+      "schema": "Lesson",
+      "description": "A collection of vocabulary lessons."
+    }
+  }
+}
