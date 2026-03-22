@@ -44,14 +44,16 @@ import {
   orderBy 
 } from "firebase/firestore";
 import { 
-  signInAnonymously, 
+  GoogleAuthProvider,
+  signInWithPopup,
   onAuthStateChanged, 
-  User
+  User,
+  signOut
 } from "firebase/auth";
 import { getDocFromServer } from "firebase/firestore";
 import { 
   ref, 
-  uploadBytes, 
+  uploadBytesResumable, 
   getDownloadURL 
 } from "firebase/storage";
 import { db, auth, storage } from "./firebase";
@@ -212,6 +214,7 @@ export default function App() {
   const [lessonData, setLessonData] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [modal, setModal] = useState<{ title: string; message: string; type: "success" | "warning" | "info" | "error"; onConfirm?: () => void } | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => localStorage.getItem("selectedVoiceURI") || "");
@@ -252,6 +255,27 @@ export default function App() {
     }
   };
 
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login Error:", error);
+      showModal("Lỗi đăng nhập", "Không thể đăng nhập bằng Google. Vui lòng thử lại.", "error");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setIsAdmin(false);
+      localStorage.setItem("isAdmin", "false");
+    } catch (error) {
+      console.error("Logout Error:", error);
+    }
+  };
+
   useEffect(() => {
     updateVoices();
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
@@ -279,11 +303,8 @@ export default function App() {
     testConnection();
 
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        setUser(u);
-      } else {
-        signInAnonymously(auth).catch(console.error);
-      }
+      setUser(u);
+      setLoading(false);
     });
 
     const lessonsRef = collection(db, "lessons");
@@ -329,40 +350,55 @@ export default function App() {
   };
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) {
+      showModal("Yêu cầu đăng nhập", "Vui lòng đăng nhập để tải video lên!", "warning", handleLogin);
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
-      showModal("Lỗi", "Video quá lớn! Vui lòng chọn video dưới 50MB.", "error");
+    // Tăng giới hạn lên 500MB cho video lớn
+    const MAX_SIZE = 500 * 1024 * 1024; 
+    if (file.size > MAX_SIZE) {
+      showModal("Lỗi", "Video quá lớn! Vui lòng chọn video dưới 500MB.", "error");
       return;
     }
 
     setIsUploadingVideo(true);
+    setUploadProgress(0);
+
     try {
       const storageRef = ref(storage, `videos/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setVideoUrl(url);
-      showModal("Thành công", "Đã tải video lên thành công!", "success");
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(Math.round(progress));
+        },
+        (error) => {
+          console.error("Upload Error:", error);
+          showModal("Lỗi", "Không thể tải video lên. Vui lòng thử lại.", "error");
+          setIsUploadingVideo(false);
+        },
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          setVideoUrl(url);
+          setIsUploadingVideo(false);
+          showModal("Thành công", "Đã tải video lên thành công!", "success");
+        }
+      );
     } catch (error) {
       console.error("Upload Error:", error);
-      showModal("Lỗi", "Không thể tải video lên. Vui lòng thử lại.", "error");
-    } finally {
+      showModal("Lỗi", "Có lỗi xảy ra khi bắt đầu tải lên.", "error");
       setIsUploadingVideo(false);
     }
   };
 
   const handleSaveLesson = async () => {
-    let currentUser = user;
-    if (!currentUser) {
-      try {
-        const cred = await signInAnonymously(auth);
-        currentUser = cred.user;
-        setUser(currentUser);
-      } catch (e) {
-        console.warn("Auth initialization failed, attempting save anyway...", e);
-        // We don't block here anymore because rules are relaxed for lessons
-      }
+    if (!user) {
+      return showModal("Yêu cầu đăng nhập", "Vui lòng đăng nhập để thực hiện thao tác này!", "warning", handleLogin);
     }
 
     if (!lessonTitle.trim()) return showModal("Thiếu thông tin", "Vui lòng nhập tên bài học!", "warning");
@@ -390,7 +426,7 @@ export default function App() {
           title: lessonTitle,
           words: words,
           videoUrl: videoUrl,
-          creatorId: currentUser?.uid || "anonymous",
+          creatorId: user?.uid || "anonymous",
           createdAt: serverTimestamp()
         });
         showModal("Thành công!", "Đã tạo bài học mới thành công 🎉", "success", () => {
@@ -674,13 +710,22 @@ export default function App() {
               />
               <label 
                 htmlFor="video-upload"
-                className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed border-indigo-200 rounded-xl cursor-pointer hover:bg-indigo-50 transition-all ${isUploadingVideo ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`flex flex-col items-center justify-center gap-2 p-3 border-2 border-dashed border-indigo-200 rounded-xl cursor-pointer hover:bg-indigo-50 transition-all ${isUploadingVideo ? "opacity-100 cursor-not-allowed bg-indigo-50" : ""}`}
               >
                 {isUploadingVideo ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                    <span className="text-sm font-bold text-indigo-600">Đang tải lên...</span>
-                  </>
+                  <div className="w-full flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                      <span className="text-sm font-bold text-indigo-600">Đang tải lên: {uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-indigo-100 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${uploadProgress}%` }}
+                        className="h-full bg-indigo-600"
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <Upload className="w-5 h-5 text-indigo-600" />
@@ -1023,13 +1068,34 @@ export default function App() {
           <h1 className="font-fredoka text-xl font-bold flex items-center gap-2">
             <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Fun with Words
           </h1>
-          <button 
-            onClick={handleAdminToggle}
-            className={`p-2 px-4 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-inner ${isAdmin ? "text-amber-400 bg-indigo-800" : "text-indigo-100 bg-indigo-700 hover:bg-indigo-800"}`}
-          >
-            <Shield className={`w-5 h-5 ${isAdmin ? "animate-pulse" : ""}`} />
-            <span>{isAdmin ? "Chế độ Sửa" : "Admin"}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-2">
+                <img src={user.photoURL || ""} alt="Avatar" className="w-8 h-8 rounded-full border-2 border-white/50" />
+                <button 
+                  onClick={handleAdminToggle}
+                  className={`p-2 px-4 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-inner ${isAdmin ? "text-amber-400 bg-indigo-800" : "text-indigo-100 bg-indigo-700 hover:bg-indigo-800"}`}
+                >
+                  <Shield className={`w-5 h-5 ${isAdmin ? "animate-pulse" : ""}`} />
+                  <span>{isAdmin ? "Chế độ Sửa" : "Admin"}</span>
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 rounded-xl bg-indigo-700 text-white hover:bg-indigo-800 transition-all"
+                  title="Đăng xuất"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                className="bg-white text-indigo-600 px-3 py-1.5 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all shadow-sm"
+              >
+                Đăng nhập
+              </button>
+            )}
+          </div>
         </header>
 
         <main className="flex-1 relative overflow-y-auto overflow-x-hidden bg-slate-50">
