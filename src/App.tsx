@@ -25,7 +25,10 @@ import {
   Loader2,
   Info,
   Settings,
-  Turtle
+  Turtle,
+  Video,
+  Film,
+  Upload
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
@@ -46,7 +49,12 @@ import {
   User
 } from "firebase/auth";
 import { getDocFromServer } from "firebase/firestore";
-import { db, auth } from "./firebase";
+import { 
+  ref, 
+  uploadBytes, 
+  getDownloadURL 
+} from "firebase/storage";
+import { db, auth, storage } from "./firebase";
 import { Lesson, Word, Screen } from "./types";
 
 // --- HELPERS ---
@@ -202,6 +210,8 @@ export default function App() {
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [lessonTitle, setLessonTitle] = useState("");
   const [lessonData, setLessonData] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [modal, setModal] = useState<{ title: string; message: string; type: "success" | "warning" | "info" | "error"; onConfirm?: () => void } | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => localStorage.getItem("selectedVoiceURI") || "");
@@ -318,6 +328,30 @@ export default function App() {
     }
   };
 
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      showModal("Lỗi", "Video quá lớn! Vui lòng chọn video dưới 50MB.", "error");
+      return;
+    }
+
+    setIsUploadingVideo(true);
+    try {
+      const storageRef = ref(storage, `videos/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setVideoUrl(url);
+      showModal("Thành công", "Đã tải video lên thành công!", "success");
+    } catch (error) {
+      console.error("Upload Error:", error);
+      showModal("Lỗi", "Không thể tải video lên. Vui lòng thử lại.", "error");
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
   const handleSaveLesson = async () => {
     let currentUser = user;
     if (!currentUser) {
@@ -343,22 +377,26 @@ export default function App() {
         await updateDoc(docRef, {
           title: lessonTitle,
           words: words,
+          videoUrl: videoUrl,
           updatedAt: serverTimestamp()
         });
         showModal("Thành công!", "Đã cập nhật bài học thành công 🎉", "success", () => {
           setScreen("setup");
           setEditingLessonId(null);
+          setVideoUrl("");
         });
       } else {
         await addDoc(collection(db, path), {
           title: lessonTitle,
           words: words,
+          videoUrl: videoUrl,
           creatorId: currentUser?.uid || "anonymous",
           createdAt: serverTimestamp()
         });
         showModal("Thành công!", "Đã tạo bài học mới thành công 🎉", "success", () => {
           setScreen("setup");
           setEditingLessonId(null);
+          setVideoUrl("");
         });
       }
     } catch (error: any) {
@@ -487,7 +525,13 @@ export default function App() {
         </div>
         {isAdmin && (
           <button 
-            onClick={() => { setEditingLessonId(null); setLessonTitle(""); setLessonData(""); setScreen("create"); }}
+            onClick={() => { 
+              setEditingLessonId(null); 
+              setLessonTitle(""); 
+              setLessonData(""); 
+              setVideoUrl("");
+              setScreen("create"); 
+            }}
             className="bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-md active:scale-95"
           >
             <Plus className="inline-block mr-1 w-5 h-5" /> Tạo mới
@@ -538,6 +582,7 @@ export default function App() {
                         setEditingLessonId(lesson.id!); 
                         setLessonTitle(lesson.title); 
                         setLessonData(lesson.words.map(w => `${w.word}${w.phonetic ? `\n${w.phonetic}` : ""}${w.meaning ? `\n${w.meaning}` : ""}\n${w.image}`).join("\n\n"));
+                        setVideoUrl(lesson.videoUrl || "");
                         setScreen("create"); 
                       }}
                       className="p-2 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors"
@@ -593,6 +638,59 @@ export default function App() {
             className="w-full border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors font-semibold"
           />
         </div>
+
+        <div>
+          <label className="block font-bold text-slate-700 mb-1 flex items-center gap-2">
+            <Video className="w-4 h-4 text-indigo-600" /> Video bài học (Tùy chọn)
+          </label>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                placeholder="Dán link video hoặc tải lên bên dưới" 
+                className="flex-1 border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors text-sm"
+              />
+              {videoUrl && (
+                <button 
+                  onClick={() => setVideoUrl("")}
+                  className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"
+                  title="Xóa video"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+            
+            <div className="relative">
+              <input 
+                type="file" 
+                accept="video/*"
+                onChange={handleVideoUpload}
+                className="hidden" 
+                id="video-upload"
+                disabled={isUploadingVideo}
+              />
+              <label 
+                htmlFor="video-upload"
+                className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed border-indigo-200 rounded-xl cursor-pointer hover:bg-indigo-50 transition-all ${isUploadingVideo ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                {isUploadingVideo ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                    <span className="text-sm font-bold text-indigo-600">Đang tải lên...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 text-indigo-600" />
+                    <span className="text-sm font-bold text-indigo-600">Tải video từ máy tính</span>
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+        </div>
         
         <div className="flex-1 flex flex-col">
           <label className="block font-bold text-slate-700 mb-1">
@@ -630,6 +728,17 @@ export default function App() {
       <div className="bg-indigo-50 rounded-2xl p-4 mb-4 text-center">
         <p className="text-slate-600 font-medium">Cùng nghe thử các từ vựng nhé!</p>
       </div>
+
+      {currentLesson?.videoUrl && (
+        <div className="mb-4 rounded-2xl overflow-hidden shadow-md bg-black aspect-video flex items-center justify-center">
+          <video 
+            src={currentLesson.videoUrl} 
+            controls 
+            className="w-full h-full"
+            poster="https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&q=80"
+          />
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-3 p-1">
         {currentLesson?.words.map((item, idx) => (

@@ -12,6 +12,7 @@ export interface Lesson {
   title: string;
   creatorId: string;
   words: Word[];
+  videoUrl?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

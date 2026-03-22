@@ -10,6 +10,7 @@
 //   - words: list (required, max 50 items)
 //     - word: string (required, 1-50 chars)
 //     - image: string (required, valid URL)
+//   - videoUrl: string (optional, valid URL)
 //   - createdAt: timestamp (optional)
 //   - updatedAt: timestamp (optional)
 //

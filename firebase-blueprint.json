@@ -31,6 +31,10 @@
           },
           "description": "The list of words in the lesson."
         },
+        "videoUrl": {
+          "type": "string",
+          "description": "The URL of the video for the lesson."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
