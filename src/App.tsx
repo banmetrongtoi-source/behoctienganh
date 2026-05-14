@@ -138,6 +138,38 @@ const getSimilarityPercent = (s1: string, s2: string) => {
   return ((longer.length - costs[shorter.length]) / longer.length) * 100;
 };
 
+const getLessonIcon = (title: string, index: number) => {
+  const lowerTitle = title.toLowerCase();
+  
+  if (lowerTitle.includes("màu") || lowerTitle.includes("color")) {
+    const colorEmojis = ["🎨", "🌈", "🖍️", "🖌️", "✨"];
+    return colorEmojis[index % colorEmojis.length];
+  }
+  
+  if (lowerTitle.includes("xe") || lowerTitle.includes("phương tiện") || lowerTitle.includes("transport")) {
+    const vehicleEmojis = ["🚗", "🚌", "✈️", "🚢", "🚁", "🚲"];
+    return vehicleEmojis[index % vehicleEmojis.length];
+  }
+  
+  if (lowerTitle.includes("động vật") || lowerTitle.includes("animal") || lowerTitle.includes("thú")) {
+    const animalEmojis = ["🐶", "🦁", "🐘", "🦒", "🦖", "🐧"];
+    return animalEmojis[index % animalEmojis.length];
+  }
+
+  if (lowerTitle.includes("trái cây") || lowerTitle.includes("quả") || lowerTitle.includes("fruit")) {
+    const fruitEmojis = ["🍎", "🍌", "🍇", "🍓", "🍉", "🍍"];
+    return fruitEmojis[index % fruitEmojis.length];
+  }
+
+  if (lowerTitle.includes("số") || lowerTitle.includes("number")) {
+    return "🔢";
+  }
+
+  // Default icons
+  const defaultEmojis = ["🐱", "🦖", "🐻", "🐰", "🦊", "🐼"];
+  return defaultEmojis[index % defaultEmojis.length];
+};
+
 const getDynamicFontSize = (text: string, isGame: boolean = false) => {
   const len = text.length;
   if (isGame) {
@@ -149,6 +181,16 @@ const getDynamicFontSize = (text: string, isGame: boolean = false) => {
     if (len > 15) return "text-xs";
     return "text-sm";
   }
+};
+
+const getYouTubeEmbedUrl = (url: string) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    return `https://www.youtube.com/embed/${match[2]}`;
+  }
+  return null;
 };
 
 const parseImportText = (text: string): Word[] => {
@@ -191,6 +233,41 @@ const parseImportText = (text: string): Word[] => {
   return parsed;
 };
 
+const PlayfulBackground = () => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 bg-[#00B1FF]">
+    {/* Sky Gradient */}
+    <div className="absolute inset-0 bg-gradient-to-b from-sky-400 to-sky-200" />
+    
+    {/* Clouds with random positions and varying speeds */}
+    <div className="cloud top-[10%] left-0 w-32 h-12" style={{ animationDelay: '0s', animationDuration: '45s' }} />
+    <div className="cloud top-[25%] left-0 w-48 h-16" style={{ animationDelay: '-10s', animationDuration: '65s' }} />
+    <div className="cloud top-[15%] left-0 w-40 h-14" style={{ animationDelay: '-30s', animationDuration: '55s' }} />
+    <div className="cloud top-[35%] left-0 w-60 h-20" style={{ animationDelay: '-15s', animationDuration: '80s' }} />
+    
+    {/* Birds flying across the sky - More variety and quantity */}
+    <div className="absolute top-[10%] left-0 text-2xl animate-bird" style={{ animationDelay: '0s', animationDuration: '18s' }}>🦅</div>
+    <div className="absolute top-[20%] left-0 text-xl animate-bird-reverse" style={{ animationDelay: '5s', animationDuration: '22s' }}>🕊️</div>
+    <div className="absolute top-[8%] left-0 text-lg animate-bird" style={{ animationDelay: '12s', animationDuration: '15s' }}>🦅</div>
+    <div className="absolute top-[15%] left-0 text-xl animate-bird-reverse" style={{ animationDelay: '2s', animationDuration: '25s' }}>🕊️</div>
+    <div className="absolute top-[25%] left-0 text-2xl animate-bird" style={{ animationDelay: '8s', animationDuration: '20s' }}>🦅</div>
+    <div className="absolute top-[5%] left-0 text-lg animate-bird-reverse" style={{ animationDelay: '15s', animationDuration: '30s' }}>🕊️</div>
+    <div className="absolute top-[12%] left-0 text-xl animate-bird" style={{ animationDelay: '4s', animationDuration: '12s' }}>🦅</div>
+    
+    {/* Sea at bottom */}
+    <div className="absolute bottom-0 left-0 right-0 h-[25vh] bg-[#0081C9] z-10">
+      <div className="absolute top-0 left-0 right-0 h-4 bg-white/20" />
+      <div className="absolute top-8 left-0 right-0 h-4 bg-white/10" />
+      
+      {/* Ships sailing back and forth - Fixed direction and 3x larger size */}
+      <div className="absolute bottom-[10%] left-0 text-[150px] animate-sailing drop-shadow-2xl" style={{ animationDuration: '40s' }}>🚢</div>
+      <div className="absolute bottom-[35%] left-0 text-[100px] animate-sailing drop-shadow-xl" style={{ animationDuration: '60s', animationDelay: '-20s' }}>⛵</div>
+    </div>
+    
+    {/* Distant Island */}
+    <div className="absolute bottom-[18vh] right-[10%] w-48 h-24 bg-emerald-500 rounded-t-full shadow-lg z-0" />
+  </div>
+);
+
 // --- COMPONENTS ---
 
 export default function App() {
@@ -219,16 +296,26 @@ export default function App() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => localStorage.getItem("selectedVoiceURI") || "");
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [isChallengeMode, setIsChallengeMode] = useState(false);
+  const [challengeWords, setChallengeWords] = useState<Word[]>([]);
+  const [quizOptions, setQuizOptions] = useState<Word[]>([]);
 
   const recognitionRef = useRef<any>(null);
 
   const updateVoices = () => {
     const allVoices = window.speechSynthesis.getVoices();
-    const enVoices = allVoices.filter(v => v.lang.startsWith("en-"));
+    if (allVoices.length === 0) return;
+
+    const enVoices = allVoices.filter(v => v.lang.startsWith("en-") || v.lang.startsWith("en_"));
     setVoices(enVoices);
     
-    // Auto-select first English voice if none selected
-    if (!selectedVoiceURI && enVoices.length > 0) {
+    // Auto-select "Google US English" as default if available and no valid selection exists
+    const googleVoice = allVoices.find(v => v.name === "Google US English");
+    const currentVoiceValid = allVoices.some(v => v.voiceURI === selectedVoiceURI);
+
+    if (googleVoice && (!selectedVoiceURI || !currentVoiceValid)) {
+      setSelectedVoiceURI(googleVoice.voiceURI);
+    } else if (!selectedVoiceURI && enVoices.length > 0) {
       const defaultVoice = enVoices.find(v => v.lang === "en-US") || enVoices[0];
       setSelectedVoiceURI(defaultVoice.voiceURI);
     }
@@ -239,13 +326,21 @@ export default function App() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       const allVoices = window.speechSynthesis.getVoices();
-      const voice = allVoices.find(v => v.voiceURI === selectedVoiceURI);
+      
+      // Strict priority: 1. Selected, 2. Google US English, 3. Any US English, 4. Any English
+      let voice = allVoices.find(v => v.voiceURI === selectedVoiceURI);
+      if (!voice) {
+        voice = allVoices.find(v => v.name === "Google US English");
+      }
+      if (!voice) {
+        voice = allVoices.find(v => v.lang === "en-US");
+      }
+      if (!voice) {
+        voice = allVoices.find(v => v.lang.startsWith("en-") || v.lang.startsWith("en_"));
+      }
       
       if (voice) {
         utterance.voice = voice;
-      } else {
-        const englishVoice = allVoices.find(v => v.lang.startsWith("en-US") || v.lang.startsWith("en_US") || v.lang.startsWith("en-GB"));
-        if (englishVoice) utterance.voice = englishVoice;
       }
 
       utterance.lang = "en-US";
@@ -505,8 +600,10 @@ export default function App() {
   };
 
   const checkPronunciation = async (recognized: string) => {
-    if (!currentLesson) return;
-    const target = currentLesson.words[currentWordIndex].word;
+    const list = isChallengeMode ? challengeWords : currentLesson?.words;
+    if (!list || list.length === 0) return;
+    
+    const target = list[currentWordIndex].word;
     const cleanTarget = target.toLowerCase().replace(/[^a-z0-9]/g, "");
     const cleanRecognized = recognized.toLowerCase().replace(/[^a-z0-9]/g, "");
     const sim = getSimilarityPercent(cleanTarget, cleanRecognized);
@@ -517,7 +614,7 @@ export default function App() {
       setMicStatus(`Bé nói: "${recognized}"`);
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       setTimeout(() => {
-        if (currentWordIndex + 1 >= currentLesson.words.length) {
+        if (currentWordIndex + 1 >= list.length) {
           setScreen("victory");
         } else {
           setCurrentWordIndex(i => i + 1);
@@ -537,11 +634,74 @@ export default function App() {
   };
 
   const startGame = (lesson: Lesson) => {
-    setCurrentLesson(lesson);
+    setIsChallengeMode(false);
+    // Sort words by length for increasing difficulty
+    const sortedWords = [...lesson.words].sort((a, b) => a.word.length - b.word.length);
+    setCurrentLesson({ ...lesson, words: sortedWords });
     setCurrentWordIndex(0);
     setScore(0);
     setScreen("game");
-    setTimeout(() => speakText(lesson.words[0].word), 500);
+    if (sortedWords.length > 0) {
+      setTimeout(() => speakText(sortedWords[0].word), 500);
+    }
+  };
+
+  const startQuiz = (lesson: Lesson) => {
+    setIsChallengeMode(false);
+    // Sort words by length for increasing difficulty
+    const sortedWords = [...lesson.words].sort((a, b) => a.word.length - b.word.length);
+    const updatedLesson = { ...lesson, words: sortedWords };
+    setCurrentLesson(updatedLesson);
+    setCurrentWordIndex(0);
+    setScore(0);
+    setScreen("quiz");
+    generateQuizOptions(0, updatedLesson);
+  };
+
+  const generateQuizOptions = (wordIndex: number, lesson: Lesson) => {
+    const target = lesson.words[wordIndex];
+    let pool = [...lesson.words];
+    
+    // Add words from other lessons if current is too small for 4 options
+    if (pool.length < 4) {
+      lessons.forEach(l => {
+        if (l.id !== lesson.id) pool.push(...l.words);
+      });
+    }
+
+    const uniquePool = Array.from(new Map(pool.map(w => [w.word.toLowerCase(), w])).values());
+    let distractors = uniquePool.filter(w => w.word.toLowerCase() !== target.word.toLowerCase());
+    distractors = distractors.sort(() => 0.5 - Math.random()).slice(0, 3);
+    
+    const options = [target, ...distractors].sort(() => 0.5 - Math.random());
+    setQuizOptions(options);
+    setTimeout(() => speakText(target.word), 500);
+  };
+
+  const handleSelectQuizOption = (word: Word) => {
+    if (!currentLesson) return;
+    const target = currentLesson.words[currentWordIndex];
+    
+    if (word.word.toLowerCase() === target.word.toLowerCase()) {
+      setScore(s => s + 1);
+      setFeedback({ text: "Chính xác! Bé giỏi quá! 🌟", type: "success" });
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+      
+      setTimeout(() => {
+        if (currentWordIndex + 1 >= currentLesson.words.length) {
+          setScreen("victory");
+        } else {
+          const nextIndex = currentWordIndex + 1;
+          setCurrentWordIndex(nextIndex);
+          setFeedback(null);
+          generateQuizOptions(nextIndex, currentLesson);
+        }
+      }, 1500);
+    } else {
+      setFeedback({ text: "Ồ! Chưa đúng rồi, thử lại nhé!", type: "warning" });
+      speakText(target.word);
+      setTimeout(() => setFeedback(null), 2000);
+    }
   };
 
   // --- RENDER SCREENS ---
@@ -586,32 +746,49 @@ export default function App() {
           </p>
         </div>
       </div>
-      
-      <div className="flex flex-col gap-4">
+
+      <div className="grid grid-cols-2 gap-4 pb-12">
         {lessons.length === 0 ? (
-          <div className="text-center p-8 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
-            <BookOpen className="w-12 h-12 text-indigo-300 mx-auto mb-2" />
-            <p className="text-slate-500 font-medium">Chưa có bài học nào.</p>
+          <div className="col-span-2 text-center p-12 bg-white/50 backdrop-blur-sm rounded-[3rem] border-4 border-dashed border-sky-200">
+            <BookOpen className="w-16 h-16 text-sky-300 mx-auto mb-3" />
+            <p className="text-sky-600 font-bold uppercase tracking-widest text-sm">Bé chưa có bài học nào!</p>
           </div>
         ) : (
-          lessons.map(lesson => (
-            <div 
-              key={lesson.id}
-              onClick={() => { setCurrentLesson(lesson); setScreen("preview"); }}
-              className="bg-white border-2 border-slate-100 rounded-2xl p-4 flex items-center shadow-sm hover:shadow-md hover:border-indigo-100 transition-all cursor-pointer group"
-            >
-              <div className="w-16 h-16 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 text-2xl group-hover:scale-110 transition-transform flex-shrink-0">
-                <BookOpen className="w-8 h-8" />
-              </div>
-              <div className="ml-4 flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs text-slate-400 font-semibold">{lesson.words.length} từ</span>
+          lessons.map((lesson, idx) => {
+            const colors = [
+              "bg-aloyellow border-aloyellow", 
+              "bg-alopurple border-alopurple", 
+              "bg-aloorange border-aloorange", 
+              "bg-emerald-500 border-emerald-500"
+            ];
+            const themeColor = colors[idx % colors.length];
+            
+            return (
+              <motion.div 
+                key={lesson.id}
+                whileHover={{ scale: 1.05, y: -5 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => { setCurrentLesson(lesson); setScreen("preview"); }}
+                className={`aspect-[4/5] rounded-[2.5rem] border-8 border-white shadow-2xl overflow-hidden relative group cursor-pointer ${themeColor}`}
+              >
+                <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="h-full flex flex-col items-center justify-center p-4">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-black/10 rounded-full blur-xl scale-125" />
+                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl shadow-lg relative z-10 group-hover:rotate-12 transition-transform">
+                      {getLessonIcon(lesson.title, idx)}
+                    </div>
+                  </div>
+                  <div className="bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-lg mb-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">{lesson.words.length} TỪ VỰNG</span>
+                  </div>
+                  <h3 className="text-lg font-fredoka font-bold text-white text-center leading-tight uppercase tracking-tight drop-shadow-md">
+                    {lesson.title}
+                  </h3>
                 </div>
-                <h3 className="font-bold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{lesson.title}</h3>
-              </div>
-              <div className="flex items-center gap-2">
+                
                 {isAdmin && (
-                  <div className="flex items-center gap-1">
+                  <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                     <button 
                       onClick={(e) => { 
                         e.stopPropagation(); 
@@ -621,27 +798,24 @@ export default function App() {
                         setVideoUrl(lesson.videoUrl || "");
                         setScreen("create"); 
                       }}
-                      className="p-2 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors"
-                      title="Sửa"
+                      className="p-1.5 rounded-lg bg-white/20 backdrop-blur-md text-white hover:bg-white hover:text-indigo-600 transition-all"
                     >
-                      <Edit2 className="w-5 h-5" />
+                      <Edit2 className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={(e) => { 
                         e.stopPropagation(); 
                         handleDeleteLesson(lesson.id);
                       }}
-                      className="p-2 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 transition-colors"
-                      title="Xóa"
+                      className="p-1.5 rounded-lg bg-white/20 backdrop-blur-md text-white hover:bg-red-500 hover:text-white transition-all"
                     >
-                      <Trash2 className="w-5 h-5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 )}
-                <ChevronRight className="text-slate-300 group-hover:text-indigo-600 transition-colors" />
-              </div>
-            </div>
-          ))
+              </motion.div>
+            );
+          })
         )}
       </div>
     </div>
@@ -762,110 +936,139 @@ export default function App() {
 
   const renderPreview = () => (
     <div className="flex flex-col p-4 h-full">
-      <div className="flex justify-between items-center mb-4">
-        <button onClick={() => setScreen("setup")} className="text-slate-500 hover:text-indigo-600 transition-colors">
+      <div className="flex justify-between items-center mb-6">
+        <button onClick={() => setScreen("setup")} className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-xl transition-all shadow-md">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h2 className="text-xl font-fredoka font-bold text-indigo-600 truncate max-w-[200px]">{currentLesson?.title}</h2>
-        <div className="w-6"></div>
+        <h2 className="text-2xl font-fredoka font-bold text-white uppercase drop-shadow-md truncate max-w-[200px]">{currentLesson?.title}</h2>
+        <div className="w-10"></div>
       </div>
       
-      <div className="bg-indigo-50 rounded-2xl p-4 mb-4 text-center">
-        <p className="text-slate-600 font-medium">Cùng nghe thử các từ vựng nhé!</p>
-      </div>
-
       {currentLesson?.videoUrl && (
-        <div className="mb-4 rounded-2xl overflow-hidden shadow-md bg-black aspect-video flex items-center justify-center">
-          <video 
-            src={currentLesson.videoUrl} 
-            controls 
-            className="w-full h-full"
-            poster="https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&q=80"
-          />
+        <div className="mb-6 rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white bg-black aspect-video flex items-center justify-center relative">
+          {getYouTubeEmbedUrl(currentLesson.videoUrl) ? (
+            <iframe
+              width="100%"
+              height="100%"
+              src={getYouTubeEmbedUrl(currentLesson.videoUrl)!}
+              title="YouTube video player"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="w-full h-full"
+            ></iframe>
+          ) : (
+            <video 
+              src={currentLesson.videoUrl} 
+              controls 
+              className="w-full h-full"
+              poster="https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&q=80"
+            />
+          )}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-3 p-1">
+      <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-4 p-1">
         {currentLesson?.words.map((item, idx) => (
-          <div key={idx} className="bg-white rounded-2xl p-3 shadow-sm flex flex-col items-center border border-slate-100">
-            <div className="w-full aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2">
-              <img src={item.image} alt={item.word} className="w-full h-full object-cover" />
+          <div key={idx} className="card-bubble bg-white p-5 flex flex-col items-center group active:scale-95 cursor-pointer border-white">
+            <div className="w-full aspect-square rounded-[2rem] overflow-hidden bg-sky-50 mb-3 border-2 border-sky-100 group-hover:border-aloblue transition-colors">
+              <img src={item.image} alt={item.word} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
             </div>
-            <h4 className={`font-bold text-slate-800 capitalize w-full text-center break-words leading-tight ${getDynamicFontSize(item.word)}`}>
+            <h4 className={`font-bold font-fredoka text-aloblue capitalize w-full text-center break-words leading-tight tracking-tight drop-shadow-sm ${getDynamicFontSize(item.word)}`}>
               {item.word}
             </h4>
-            {item.phonetic && <p className="text-[10px] text-indigo-500 font-medium mb-0.5 text-center">{item.phonetic}</p>}
-            {item.meaning && <p className="text-xs text-slate-500 font-bold mb-1 text-center">{item.meaning}</p>}
-            <div className="mt-2 flex gap-1 w-full">
+            {item.phonetic && <p className="text-[10px] text-slate-400 font-bold mb-1 opacity-70 italic">{item.phonetic}</p>}
+            {item.meaning && <p className="text-xs text-slate-500 font-bold mb-3 text-center bg-sky-50 px-3 py-1 rounded-full">{item.meaning}</p>}
+            
+            <div className="mt-auto flex gap-2 w-full">
               <button 
                 onClick={() => speakText(item.word)}
-                className="flex-1 bg-indigo-50 text-indigo-600 py-2 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-xs flex items-center justify-center gap-1 active:scale-95"
+                className="flex-1 bg-aloblue text-white py-2 rounded-2xl font-bold hover:bg-sky-600 transition-all shadow-md active:translate-y-1"
               >
-                <Volume2 className="w-3.5 h-3.5" /> Nghe
+                <Volume2 className="w-5 h-5 mx-auto" />
               </button>
               <button 
                 onClick={() => speakText(item.word, true)}
-                className="bg-amber-50 text-amber-600 p-2 rounded-xl font-bold hover:bg-amber-100 transition-colors text-xs flex items-center justify-center active:scale-95"
-                title="Đọc chậm"
+                className="flex-1 bg-aloorange text-white py-2 rounded-2xl font-bold hover:bg-orange-600 transition-all shadow-md active:translate-y-1"
               >
-                <Turtle className="w-3.5 h-3.5" />
+                <Turtle className="w-5 h-5 mx-auto" />
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-slate-200">
+      <div className="mt-6 grid grid-cols-2 gap-3 pb-4">
         <button 
           onClick={() => currentLesson && startGame(currentLesson)}
-          className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold text-xl hover:bg-pink-600 transition-all shadow-[0_4px_0_rgb(190,24,93)] active:shadow-[0_0px_0_rgb(190,24,93)] active:translate-y-1"
+          className="bg-emerald-500 btn-alo text-lg shadow-[0_6px_0_#059669]"
         >
-          <Play className="inline-block mr-2 w-6 h-6" /> Bắt đầu học ngay
+          Luyện đọc
+        </button>
+        <button 
+          onClick={() => currentLesson && startQuiz(currentLesson)}
+          className="bg-aloorange btn-alo text-lg shadow-[0_6px_0_#C05600]"
+        >
+          Trò chơi
         </button>
       </div>
     </div>
   );
 
   const handleNextWord = () => {
-    if (!currentLesson) return;
-    if (currentWordIndex < currentLesson.words.length - 1) {
+    const list = isChallengeMode ? challengeWords : currentLesson?.words;
+    if (!list) return;
+    if (currentWordIndex < list.length - 1) {
       const nextIndex = currentWordIndex + 1;
       setCurrentWordIndex(nextIndex);
       setFeedback(null);
       setMicStatus("Nhấn mic để đọc");
-      setTimeout(() => speakText(currentLesson.words[nextIndex].word), 300);
+      setTimeout(() => speakText(list[nextIndex].word), 300);
     } else {
       setScreen("victory");
     }
   };
 
   const handlePrevWord = () => {
-    if (!currentLesson) return;
+    const list = isChallengeMode ? challengeWords : currentLesson?.words;
+    if (!list) return;
     if (currentWordIndex > 0) {
       const prevIndex = currentWordIndex - 1;
       setCurrentWordIndex(prevIndex);
       setFeedback(null);
       setMicStatus("Nhấn mic để đọc");
-      setTimeout(() => speakText(currentLesson.words[prevIndex].word), 300);
+      setTimeout(() => speakText(list[prevIndex].word), 300);
     }
   };
 
   const renderGame = () => {
-    if (!currentLesson) return null;
-    const wordObj = currentLesson.words[currentWordIndex];
+    const list = isChallengeMode ? challengeWords : currentLesson?.words;
+    if (!list) return null;
+    const wordObj = list[currentWordIndex];
+    const totalWords = list.length;
+    const difficultyLevel = Math.floor(wordObj.word.length / 3) + 1;
 
     return (
-      <div className="flex flex-col p-4 h-full bg-slate-50 transition-colors duration-300">
-        <div className="flex justify-between items-center mb-4">
-          <button onClick={() => showModal("Dừng học?", "Bé có muốn quay lại trang bài học không?", "warning", () => setScreen("preview"))} className="text-slate-400 hover:text-slate-600">
-            <X className="w-8 h-8" />
+      <div className="flex flex-col p-4 h-full relative overflow-hidden">
+        <div className="flex justify-between items-center mb-6 relative z-10">
+          <button onClick={() => showModal("Dừng chơi?", `Bé có muốn quay lại trang ${isChallengeMode ? 'chính' : 'bài học'} không?`, "warning", () => setScreen(isChallengeMode ? "setup" : "preview"))} className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-xl transition-all shadow-md">
+            <X className="w-6 h-6" />
           </button>
-          <div className="bg-white px-4 py-1.5 rounded-full shadow-sm font-bold text-indigo-600 border border-indigo-100">
-            Từ {currentWordIndex + 1} / {currentLesson.words.length}
+          
+          <div className="bg-white/90 backdrop-blur-md px-5 py-2 rounded-full shadow-xl border-2 border-sky-100 flex items-center gap-3">
+            <div className={`font-fredoka font-bold ${isChallengeMode ? "text-aloorange" : "text-aloblue"}`}>
+               {isChallengeMode ? `THỬ THÁCH ${currentWordIndex + 1}/${totalWords}` : `TỪ ${currentWordIndex + 1}/${totalWords}`}
+            </div>
+            <div className="flex items-center gap-0.5">
+               {[...Array(Math.min(5, difficultyLevel || 0))].map((_, i) => (
+                 <Star key={i} className="w-3.5 h-3.5 fill-aloyellow text-aloyellow" />
+               ))}
+            </div>
           </div>
+          <div className="w-10"></div>
         </div>
 
-        <div className={`flex-1 bg-white rounded-3xl shadow-lg flex flex-col items-center justify-center p-6 relative transition-all duration-300 border-4 ${feedback?.type === "success" ? "border-emerald-500 bg-emerald-50" : feedback?.type === "warning" ? "border-amber-500 bg-amber-50" : "border-transparent"}`}>
+        <div className={`flex-1 card-bubble bg-white p-6 flex flex-col items-center justify-center relative transition-all duration-300 border-white shadow-[0_30px_60px_-12px_rgba(0,0,0,0.3)] ${feedback?.type === "success" ? "ring-8 ring-emerald-400" : feedback?.type === "warning" ? "ring-8 ring-aloorange" : ""}`}>
           <AnimatePresence>
             {feedback && (
               <motion.div 
@@ -881,75 +1084,66 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl overflow-hidden shadow-inner mb-6 bg-slate-100 flex items-center justify-center border-4 border-indigo-50">
+          <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-[3rem] overflow-hidden shadow-inner mb-6 bg-sky-50 flex items-center justify-center border-4 border-sky-100">
             <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover" />
           </div>
 
-          <h2 className={`font-fredoka font-bold text-slate-800 mb-1 uppercase tracking-wide text-center px-4 break-words leading-tight ${getDynamicFontSize(wordObj.word, true)}`}>
+          <h2 className={`font-fredoka font-bold text-slate-800 mb-2 uppercase tracking-tight text-center px-4 break-words leading-none drop-shadow-sm ${getDynamicFontSize(wordObj.word, true)}`}>
             {wordObj.word}
           </h2>
-          {wordObj.phonetic && (
-            <p className="text-lg font-medium text-indigo-500 mb-1 bg-indigo-50 px-4 py-0.5 rounded-full text-center">
-              {wordObj.phonetic}
-            </p>
-          )}
-          {wordObj.meaning && (
-            <p className="text-2xl font-bold text-pink-500 mb-4 text-center">
-              {wordObj.meaning}
-            </p>
-          )}
           
-          <div className="flex items-center gap-3 mt-2 mb-6">
+          <div className="flex items-center gap-4 mt-2 mb-8">
             <button 
               onClick={() => speakText(wordObj.word)}
-              className="text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 p-4 rounded-full transition-colors shadow-sm active:scale-90"
-              title="Nghe bình thường"
+              className="bg-aloblue text-white p-5 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-110"
+              title="Nghe"
             >
-              <Volume2 className="w-8 h-8" />
+              <Volume2 className="w-10 h-10" />
             </button>
             <button 
               onClick={() => speakText(wordObj.word, true)}
-              className="text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 p-4 rounded-full transition-colors shadow-sm active:scale-90"
-              title="Đọc chậm"
+              className="bg-aloorange text-white p-5 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-110"
+              title="Rùa"
             >
-              <Turtle className="w-8 h-8" />
+              <Turtle className="w-10 h-10" />
             </button>
           </div>
 
-          <div className="mt-auto relative w-full flex justify-center pb-4">
-            {isListening && (
-              <motion.div 
-                initial={{ scale: 0.8, opacity: 0.5 }}
-                animate={{ scale: 1.5, opacity: 0 }}
-                transition={{ repeat: Infinity, duration: 1 }}
-                className="absolute inset-0 bg-pink-500 rounded-full"
-              />
-            )}
-            
-            <button 
-              onClick={toggleListening}
-              className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all active:translate-y-1 ${isListening ? "bg-red-500 shadow-red-700" : "bg-pink-500 shadow-pink-700"}`}
-            >
-              <Mic className={`w-10 h-10 text-white ${isListening ? "animate-pulse" : ""}`} />
-            </button>
+          <div className="mt-auto relative w-full flex justify-center pb-6">
+            <div className="relative">
+              {isListening && (
+                <motion.div 
+                  initial={{ scale: 0.8, opacity: 0.5 }}
+                  animate={{ scale: 2, opacity: 0 }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                  className="absolute inset-0 bg-red-400 rounded-full"
+                />
+              )}
+              
+              <button 
+                onClick={toggleListening}
+                className={`relative z-10 w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${isListening ? "bg-red-500" : "bg-emerald-500"}`}
+              >
+                <Mic className={`w-12 h-12 text-white ${isListening ? "animate-pulse" : ""}`} />
+              </button>
+            </div>
           </div>
           
-          <p className="text-slate-500 font-medium text-sm mt-2">{micStatus}</p>
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-4">{micStatus}</p>
 
-          {/* NÚT ĐIỀU HƯỚNG */}
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-2 pointer-events-none">
+          <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none">
             <button 
               onClick={handlePrevWord}
               disabled={currentWordIndex === 0}
-              className={`w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-all pointer-events-auto ${currentWordIndex === 0 ? "bg-slate-100 text-slate-300 cursor-not-allowed" : "bg-white text-indigo-600 hover:bg-indigo-50 active:scale-90"}`}
+              className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all pointer-events-auto active:scale-90 ${currentWordIndex === 0 ? "bg-slate-200 text-slate-400" : "bg-white text-aloblue border-4 border-sky-50"}`}
             >
-              <ChevronLeft className="w-8 h-8" />
+              <ChevronLeft className="w-10 h-10" />
             </button>
             <button 
               onClick={handleNextWord}
-              className="w-12 h-12 rounded-full bg-white text-indigo-600 flex items-center justify-center shadow-md hover:bg-indigo-50 transition-all active:scale-90 pointer-events-auto"
+              className="w-14 h-14 rounded-2xl bg-white text-aloblue border-4 border-sky-50 flex items-center justify-center shadow-xl active:scale-90 pointer-events-auto"
             >
-              <ChevronRight className="w-8 h-8" />
+              <ChevronRight className="w-10 h-10" />
             </button>
           </div>
         </div>
@@ -957,30 +1151,107 @@ export default function App() {
     );
   };
 
-  const renderVictory = () => (
-    <div className="flex flex-col items-center justify-center p-6 h-full text-center">
-      <div className="w-32 h-32 bg-yellow-100 rounded-full flex items-center justify-center mb-6 shadow-lg border-4 border-yellow-300">
-        <Trophy className="w-16 h-16 text-amber-500" />
-      </div>
-      
-      <h2 className="text-4xl font-fredoka font-bold text-indigo-600 mb-2">Hoàn thành!</h2>
-      <p className="text-lg text-slate-600 mb-8 font-medium">Bé đã đọc chính xác các từ vựng.</p>
-      
-      <div className="bg-white rounded-2xl p-6 shadow-md border-2 border-indigo-50 w-full mb-8">
-        <p className="text-slate-500 font-bold mb-1 uppercase tracking-wider text-sm">Điểm số</p>
-        <p className="text-5xl font-fredoka font-bold text-emerald-500">
-          {score} / {currentLesson?.words.length}
-        </p>
-      </div>
+  const renderQuiz = () => {
+    if (!currentLesson) return null;
+    const targetWord = currentLesson.words[currentWordIndex];
+    const totalWords = currentLesson.words.length;
 
-      <button 
-        onClick={() => setScreen("preview")}
-        className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-xl hover:bg-indigo-700 transition-all shadow-[0_4px_0_rgb(67,56,202)] active:shadow-[0_0px_0_rgb(67,56,202)] active:translate-y-1"
-      >
-        <ArrowLeft className="inline-block mr-2 w-6 h-6" /> Quay lại bài học
-      </button>
-    </div>
-  );
+    return (
+      <div className="flex flex-col p-4 h-full relative overflow-hidden">
+        <div className="flex justify-between items-center mb-6 relative z-10">
+          <button onClick={() => setScreen("preview")} className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-xl transition-all shadow-md">
+            <X className="w-6 h-6" />
+          </button>
+          <div className="bg-white/90 backdrop-blur-md px-6 py-2 rounded-full shadow-xl border-2 border-sky-100">
+            <span className="font-fredoka font-bold text-aloblue uppercase tracking-tight">Câu hỏi {currentWordIndex + 1}/{totalWords}</span>
+          </div>
+          <div className="w-10"></div>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center gap-6 pt-4 relative z-10">
+          <div className="w-full max-w-xs flex flex-col items-center gap-4">
+            <h3 className="text-3xl font-fredoka font-bold text-white text-center drop-shadow-lg leading-tight uppercase">
+              Bé chọn hình của từ nào?
+            </h3>
+            
+            <button 
+              onClick={() => speakText(targetWord.word)}
+              className="card-bubble bg-white p-6 w-full flex flex-col items-center gap-3 border-white active:scale-95 group transition-transform"
+            >
+              <div className="w-16 h-16 bg-aloblue text-white rounded-[1.5rem] flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+                <Volume2 className="w-10 h-10" />
+              </div>
+              <span className="text-4xl font-fredoka font-bold text-aloblue tracking-tight uppercase leading-none">{targetWord.word}</span>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Bấm để nghe lại</p>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+            {quizOptions.map((option, idx) => (
+              <motion.button
+                key={`${currentWordIndex}-${idx}`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => handleSelectQuizOption(option)}
+                className="aspect-square bg-white rounded-[3rem] p-3 shadow-2xl border-8 border-white overflow-hidden hover:scale-105 active:scale-95 transition-all flex items-center justify-center relative group"
+              >
+                <img src={option.image} alt="Option" className="w-full h-full object-cover rounded-[2rem]" />
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderVictory = () => {
+    const list = isChallengeMode ? challengeWords : currentLesson?.words;
+    return (
+      <div className="flex flex-col items-center justify-center p-6 h-full text-center relative overflow-hidden bg-emerald-50/20">
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+          <div className="absolute top-10 left-10 w-20 h-20 bg-yellow-200 rounded-full blur-3xl opacity-30 animate-float" />
+          <div className="absolute bottom-10 right-10 w-32 h-32 bg-pink-200 rounded-full blur-3xl opacity-30 animate-bubble" />
+        </div>
+        
+        <div className="w-40 h-40 bg-white rounded-[3rem] flex items-center justify-center mb-8 shadow-2xl border-4 border-yellow-300 relative z-10 animate-bubble">
+          <Trophy className="w-20 h-20 text-amber-500" />
+          <motion.div 
+            animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+            transition={{ repeat: Infinity, duration: 1.5 }}
+            className="absolute -top-4 -right-4 bg-pink-500 text-white w-14 h-14 rounded-full flex items-center justify-center font-fredoka font-bold border-4 border-white shadow-xl text-sm"
+          >
+            TUYỆT!
+          </motion.div>
+        </div>
+        
+        <div className="relative z-10">
+          <h2 className="text-5xl font-fredoka font-bold text-indigo-600 mb-3 drop-shadow-sm">{isChallengeMode ? "Đỉnh quá bé ơi!" : "Hoàn thành!"}</h2>
+          <p className="text-xl text-slate-500 mb-10 font-bold uppercase tracking-tight">
+            {isChallengeMode ? "Bé đã vượt qua thử thách khó rồi đấy!" : "Bé đã hoàn thành bài học xuất sắc!"}
+          </p>
+          
+          <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border-4 border-indigo-50 w-full max-w-sm mb-10 mx-auto transform -rotate-1">
+            <p className="text-slate-400 font-bold mb-2 uppercase tracking-widest text-sm">Điểm số của bé</p>
+            <div className="flex items-center justify-center gap-3">
+              <Star className="w-8 h-8 text-yellow-400 fill-yellow-400" />
+              <p className={`text-6xl font-fredoka font-bold ${isChallengeMode ? "text-pink-500" : "text-emerald-500"}`}>
+                {score} / {list?.length}
+              </p>
+              <Star className="w-8 h-8 text-yellow-400 fill-yellow-400" />
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setScreen(isChallengeMode ? "setup" : "preview")}
+            className="w-full max-w-xs bg-indigo-600 text-white py-5 rounded-3xl font-fredoka font-bold text-2xl hover:bg-indigo-700 transition-all shadow-[0_6px_0_rgb(67,56,202)] active:shadow-[0_0px_0_rgb(67,56,202)] active:translate-y-1 group"
+          >
+            <ArrowLeft className="inline-block mr-2 w-7 h-7 group-hover:-translate-x-1 transition-transform" /> 
+            {isChallengeMode ? "Về trang chính" : "Tiếp tục học"}
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const renderVoiceSettings = () => (
     <div className="fixed inset-0 bg-slate-900/40 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1055,33 +1326,38 @@ export default function App() {
   );
 
   return (
-    <div className="bg-indigo-50 font-quicksand text-slate-800 min-h-screen flex flex-col items-center justify-center p-4">
+    <div className="bg-[#00B1FF] font-quicksand text-slate-800 min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      <PlayfulBackground />
       {loading && (
-        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
-          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
-          <h2 className="text-2xl font-fredoka text-indigo-600">Đang tải...</h2>
+        <div className="fixed inset-0 bg-sky-400/90 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white">
+          <Loader2 className="w-16 h-16 animate-spin mb-4" />
+          <h2 className="text-3xl font-fredoka drop-shadow-md">Bé đợi chút nha...</h2>
         </div>
       )}
 
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden min-h-[600px] flex flex-col relative">
-        <header className="bg-indigo-600 text-white p-4 flex justify-between items-center shadow-md z-10">
-          <h1 className="font-fredoka text-xl font-bold flex items-center gap-2">
-            <Star className="w-5 h-5 text-amber-400 fill-amber-400" /> Fun with Words
+      <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[3.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden min-h-[600px] flex flex-col relative z-20 border-8 border-white/50">
+        <header className="bg-gradient-to-r from-aloblue to-[#0081C9] text-white p-6 flex justify-between items-center z-10 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <h1 className="font-fredoka text-2xl font-bold flex items-center gap-3 relative z-10 tracking-tight drop-shadow-md uppercase">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-xl rotate-3 group-hover:rotate-0 transition-transform">🐱</div>
+            Fun with words
           </h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative z-10">
             {user ? (
               <div className="flex items-center gap-2">
-                <img src={user.photoURL || ""} alt="Avatar" className="w-8 h-8 rounded-full border-2 border-white/50" />
                 <button 
                   onClick={handleAdminToggle}
-                  className={`p-2 px-4 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-inner ${isAdmin ? "text-amber-400 bg-indigo-800" : "text-indigo-100 bg-indigo-700 hover:bg-indigo-800"}`}
+                  className={`p-2 rounded-2xl transition-all shadow-lg ${isAdmin ? "bg-amber-400 text-white" : "bg-white/20 text-white"}`}
+                  title={isAdmin ? "Tắt Sửa" : "Bật Sửa"}
                 >
-                  <Shield className={`w-5 h-5 ${isAdmin ? "animate-pulse" : ""}`} />
-                  <span>{isAdmin ? "Chế độ Sửa" : "Admin"}</span>
+                  <Shield className="w-6 h-6" />
                 </button>
+                <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-white shadow-xl">
+                  <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="User" />
+                </div>
                 <button 
                   onClick={handleLogout}
-                  className="p-2 rounded-xl bg-indigo-700 text-white hover:bg-indigo-800 transition-all"
+                  className="p-2 rounded-2xl bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg"
                   title="Đăng xuất"
                 >
                   <X className="w-5 h-5" />
@@ -1090,7 +1366,7 @@ export default function App() {
             ) : (
               <button 
                 onClick={handleLogin}
-                className="bg-white text-indigo-600 px-3 py-1.5 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all shadow-sm"
+                className="bg-white text-aloblue px-5 py-2 rounded-full font-bold text-sm hover:bg-sky-50 transition-all shadow-2xl active:scale-95"
               >
                 Đăng nhập
               </button>
@@ -1098,7 +1374,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 relative overflow-y-auto overflow-x-hidden bg-slate-50">
+        <main className="flex-1 relative overflow-y-auto overflow-x-hidden p-3 bg-white/30 backdrop-blur-sm">
           <AnimatePresence mode="wait">
             <motion.div
               key={screen}
@@ -1111,12 +1387,19 @@ export default function App() {
               {screen === "create" && renderCreate()}
               {screen === "preview" && renderPreview()}
               {screen === "game" && renderGame()}
+              {screen === "quiz" && renderQuiz()}
               {screen === "victory" && renderVictory()}
             </motion.div>
           </AnimatePresence>
         </main>
-        <div className="p-2 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-50 border-t border-slate-100">
-          BY TAMBMT
+        <div className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-50 border-t border-slate-100 relative overflow-hidden h-24 flex items-center justify-center">
+          <div className="absolute inset-0 pointer-events-none">
+             <div className="absolute top-1/2 -translate-y-1/2 flex items-center gap-6 animate-[chasing_15s_linear_infinite]" style={{ width: 'fit-content' }}>
+                <span className="text-7xl drop-shadow-lg">🦖</span>
+                <span className="text-4xl drop-shadow-md">🏃</span>
+             </div>
+          </div>
+          <span className="relative z-10 bg-white/90 px-6 py-2 rounded-full backdrop-blur-md shadow-md border-2 border-indigo-50 text-indigo-400">BY TAMBMT</span>
         </div>
       </div>
 

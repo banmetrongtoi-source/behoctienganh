@@ -17,4 +17,4 @@ export interface Lesson {
   updatedAt?: Timestamp;
 }
 
-export type Screen = "setup" | "create" | "preview" | "game" | "victory";
+export type Screen = "setup" | "create" | "preview" | "game" | "victory" | "quiz";

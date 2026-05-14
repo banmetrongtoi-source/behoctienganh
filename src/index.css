@@ -4,11 +4,16 @@
 @theme {
   --font-fredoka: "Fredoka", sans-serif;
   --font-quicksand: "Quicksand", sans-serif;
+  --color-aloblue: #00B1FF;
+  --color-aloorange: #FF7000;
+  --color-aloyellow: #FFD200;
+  --color-alopurple: #A033FF;
 }
 
 body {
   -webkit-tap-highlight-color: transparent;
   font-family: var(--font-quicksand);
+  background-color: #00B1FF;
 }
 
 .font-fredoka {
@@ -17,7 +22,76 @@ body {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.2); border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: white; border-radius: 10px; }
+
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-15px) rotate(2deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes cloudMove {
+  0% { transform: translateX(-200px); }
+  100% { transform: translateX(110vw); }
+}
+
+@keyframes sailing {
+  0% { transform: translateX(-300px) scaleX(-1); }
+  48% { transform: translateX(110vw) scaleX(-1); }
+  50% { transform: translateX(110vw) scaleX(1); }
+  98% { transform: translateX(-300px) scaleX(1); }
+  100% { transform: translateX(-300px) scaleX(-1); }
+}
+
+@keyframes birdFly {
+  0% { transform: translate(-100px, 0) scaleX(1); }
+  100% { transform: translate(110vw, -20px) scaleX(1); }
+}
+
+@keyframes birdFlyReverse {
+  0% { transform: translate(110vw, 10px) scaleX(-1); }
+  100% { transform: translate(-100px, -10px) scaleX(-1); }
+}
+
+@keyframes chasing {
+  0% { transform: translateX(-200px) scaleX(1); }
+  45% { transform: translateX(calc(100vw + 200px)) scaleX(1); }
+  50% { transform: translateX(calc(100vw + 200px)) scaleX(-1); }
+  95% { transform: translateX(-200px) scaleX(-1); }
+  100% { transform: translateX(-200px) scaleX(1); }
+}
+
+.animate-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+.animate-sailing {
+  animation: sailing 50s linear infinite;
+}
+
+.animate-bird {
+  animation: birdFly 15s linear infinite;
+}
+
+.animate-bird-reverse {
+  animation: birdFlyReverse 20s linear infinite;
+}
+
+.cloud {
+  position: absolute;
+  background: white;
+  border-radius: 50px;
+  opacity: 0.8;
+  filter: blur(20px);
+  animation: cloudMove 60s linear infinite;
+}
+
+.card-bubble {
+  @apply rounded-[3rem] border-8 border-white shadow-2xl transition-all duration-300;
+}
+
+.btn-alo {
+  @apply rounded-full px-6 py-3 font-bold text-white shadow-[0_6px_0_rgba(0,0,0,0.2)] transition-all active:translate-y-1 active:shadow-none;
+}
 
