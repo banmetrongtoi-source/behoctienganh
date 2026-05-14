@@ -28,7 +28,8 @@ import {
   Turtle,
   Video,
   Film,
-  Upload
+  Upload,
+  User as UserIcon
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
@@ -181,6 +182,14 @@ const getDynamicFontSize = (text: string, isGame: boolean = false) => {
     if (len > 15) return "text-xs";
     return "text-sm";
   }
+};
+
+const getDynamicFontSizeForCard = (text: string) => {
+  const len = text.length;
+  if (len > 25) return "text-[10px]";
+  if (len > 20) return "text-[12px]";
+  if (len > 15) return "text-sm";
+  return "text-lg";
 };
 
 const getYouTubeEmbedUrl = (url: string) => {
@@ -769,22 +778,24 @@ export default function App() {
                 whileHover={{ scale: 1.05, y: -5 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => { setCurrentLesson(lesson); setScreen("preview"); }}
-                className={`aspect-[4/5] rounded-[2.5rem] border-8 border-white shadow-2xl overflow-hidden relative group cursor-pointer ${themeColor}`}
+                className={`aspect-[4/5] rounded-[2rem] sm:rounded-[2.5rem] border-4 sm:border-8 border-white shadow-2xl overflow-hidden relative group cursor-pointer ${themeColor}`}
               >
                 <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="h-full flex flex-col items-center justify-center p-4">
-                  <div className="relative mb-4">
+                <div className="h-full flex flex-col items-center justify-center p-2 pb-4 sm:p-4 sm:pb-6">
+                  <div className="relative mb-2">
                     <div className="absolute inset-0 bg-black/10 rounded-full blur-xl scale-125" />
-                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl shadow-lg relative z-10 group-hover:rotate-12 transition-transform">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full flex items-center justify-center text-4xl sm:text-5xl shadow-lg relative z-10 group-hover:rotate-12 transition-transform">
                       {getLessonIcon(lesson.title, idx)}
                     </div>
                   </div>
-                  <div className="bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-lg mb-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">{lesson.words.length} TỪ VỰNG</span>
+                  <div className="bg-white/95 backdrop-blur-sm px-2 py-1 rounded-full shadow-md mb-2 min-w-[80%] flex justify-center">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none whitespace-nowrap">{lesson.words.length} TỪ VỰNG</span>
                   </div>
-                  <h3 className="text-lg font-fredoka font-bold text-white text-center leading-tight uppercase tracking-tight drop-shadow-md">
-                    {lesson.title}
-                  </h3>
+                  <div className="flex-1 flex items-center justify-center w-full">
+                    <h3 className={`${getDynamicFontSizeForCard(lesson.title)} font-arial font-bold text-white text-center leading-tight uppercase tracking-tight drop-shadow-md px-1 w-full break-words`}>
+                      {lesson.title}
+                    </h3>
+                  </div>
                 </div>
                 
                 {isAdmin && (
@@ -970,7 +981,7 @@ export default function App() {
 
       <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-4 p-1">
         {currentLesson?.words.map((item, idx) => (
-          <div key={idx} className="card-bubble bg-white p-5 flex flex-col items-center group active:scale-95 cursor-pointer border-white">
+          <div key={idx} className="card-bubble bg-white p-3 sm:p-5 flex flex-col items-center group active:scale-95 cursor-pointer border-white">
             <div className="w-full aspect-square rounded-[2rem] overflow-hidden bg-sky-50 mb-3 border-2 border-sky-100 group-hover:border-aloblue transition-colors">
               <img src={item.image} alt={item.word} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
             </div>
@@ -1326,7 +1337,7 @@ export default function App() {
   );
 
   return (
-    <div className="bg-[#00B1FF] font-quicksand text-slate-800 min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="bg-[#00B1FF] font-arial text-slate-800 min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 relative overflow-hidden">
       <PlayfulBackground />
       {loading && (
         <div className="fixed inset-0 bg-sky-400/90 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white">
@@ -1335,7 +1346,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[3.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden min-h-[600px] flex flex-col relative z-20 border-8 border-white/50">
+      <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[3rem] sm:rounded-[3.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden min-h-[600px] flex flex-col relative z-20 border-4 sm:border-8 border-white/50">
         <header className="bg-gradient-to-r from-aloblue to-[#0081C9] text-white p-6 flex justify-between items-center z-10 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
           <h1 className="font-fredoka text-2xl font-bold flex items-center gap-3 relative z-10 tracking-tight drop-shadow-md uppercase">
@@ -1350,7 +1361,7 @@ export default function App() {
                   className={`p-2 rounded-2xl transition-all shadow-lg ${isAdmin ? "bg-amber-400 text-white" : "bg-white/20 text-white"}`}
                   title={isAdmin ? "Tắt Sửa" : "Bật Sửa"}
                 >
-                  <Shield className="w-6 h-6" />
+                  <UserIcon className="w-6 h-6" />
                 </button>
                 <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-white shadow-xl">
                   <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="User" />
@@ -1366,15 +1377,16 @@ export default function App() {
             ) : (
               <button 
                 onClick={handleLogin}
-                className="bg-white text-aloblue px-5 py-2 rounded-full font-bold text-sm hover:bg-sky-50 transition-all shadow-2xl active:scale-95"
+                className="bg-white/20 text-white p-2 rounded-full hover:bg-sky-50 transition-all shadow-2xl active:scale-95"
+                title="Đăng nhập"
               >
-                Đăng nhập
+                <UserIcon className="w-6 h-6" />
               </button>
             )}
           </div>
         </header>
 
-        <main className="flex-1 relative overflow-y-auto overflow-x-hidden p-3 bg-white/30 backdrop-blur-sm">
+        <main className="flex-1 relative overflow-y-auto overflow-x-hidden p-2 sm:p-3 bg-white/30 backdrop-blur-sm">
           <AnimatePresence mode="wait">
             <motion.div
               key={screen}
@@ -1395,8 +1407,8 @@ export default function App() {
         <div className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-50 border-t border-slate-100 relative overflow-hidden h-24 flex items-center justify-center">
           <div className="absolute inset-0 pointer-events-none">
              <div className="absolute top-1/2 -translate-y-1/2 flex items-center gap-6 animate-[chasing_15s_linear_infinite]" style={{ width: 'fit-content' }}>
-                <span className="text-7xl drop-shadow-lg">🦖</span>
                 <span className="text-4xl drop-shadow-md">🏃</span>
+                <span className="text-7xl drop-shadow-lg">🦖</span>
              </div>
           </div>
           <span className="relative z-10 bg-white/90 px-6 py-2 rounded-full backdrop-blur-md shadow-md border-2 border-indigo-50 text-indigo-400">BY TAMBMT</span>
