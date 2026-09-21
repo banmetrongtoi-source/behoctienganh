@@ -716,13 +716,13 @@ export default function App() {
   // --- RENDER SCREENS ---
 
   const renderSetup = () => (
-    <div className="flex flex-col p-4">
+    <div className="flex flex-col p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
       <div className="flex justify-between items-center mb-6">
         <div className="flex flex-col">
-          <h2 className="text-2xl font-fredoka font-bold text-indigo-600">Chọn bài học</h2>
+          <h2 className="text-2xl sm:text-3xl font-fredoka font-bold text-indigo-700">Chọn bài học</h2>
           <button 
             onClick={() => setShowVoiceSettings(true)}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors mt-0.5 group"
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-700 transition-colors mt-0.5 group"
           >
             <Settings className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" />
             <span>Cài đặt giọng đọc cho bé</span>
@@ -737,26 +737,26 @@ export default function App() {
               setVideoUrl("");
               setScreen("create"); 
             }}
-            className="bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-md active:scale-95"
+            className="bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-md active:scale-95 flex items-center gap-1"
           >
-            <Plus className="inline-block mr-1 w-5 h-5" /> Tạo mới
+            <Plus className="w-5 h-5" /> Tạo mới bài học
           </button>
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 mb-6 flex items-start gap-3">
-        <div className="bg-amber-100 p-2 rounded-xl text-amber-600">
+      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 sm:p-4 mb-6 flex items-start gap-3 shadow-xs">
+        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 flex-shrink-0">
           <Info className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-xs font-bold text-amber-800 mb-0.5">Mẹo cho Ba Mẹ:</p>
-          <p className="text-[11px] text-amber-700 leading-tight">
+          <p className="text-xs sm:text-sm font-bold text-amber-800 mb-0.5">Mẹo cho Ba Mẹ:</p>
+          <p className="text-xs text-amber-700 leading-relaxed">
             Ba mẹ hãy bấm vào <span className="font-bold">"Cài đặt giọng đọc cho bé"</span> phía trên để chọn giọng đọc tiếng Anh chuẩn nhất nhé!
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 pb-12">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 pb-12">
         {lessons.length === 0 ? (
           <div className="col-span-2 text-center p-12 bg-white/50 backdrop-blur-sm rounded-[3rem] border-4 border-dashed border-sky-200">
             <BookOpen className="w-16 h-16 text-sky-300 mx-auto mb-3" />
@@ -833,7 +833,7 @@ export default function App() {
   );
 
   const renderCreate = () => (
-    <div className="flex flex-col p-4 h-full">
+    <div className="flex flex-col p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto w-full h-full pb-12">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button onClick={() => setScreen("setup")} className="text-slate-500 hover:text-indigo-600 transition-colors">
@@ -946,17 +946,17 @@ export default function App() {
   );
 
   const renderPreview = () => (
-    <div className="flex flex-col p-4 h-full">
+    <div className="flex flex-col p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full h-full">
       <div className="flex justify-between items-center mb-6">
         <button onClick={() => setScreen("setup")} className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-xl transition-all shadow-md">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h2 className="text-2xl font-fredoka font-bold text-white uppercase drop-shadow-md truncate max-w-[200px]">{currentLesson?.title}</h2>
+        <h2 className="text-2xl sm:text-3xl font-fredoka font-bold text-white uppercase drop-shadow-md truncate max-w-md text-center">{currentLesson?.title}</h2>
         <div className="w-10"></div>
       </div>
       
       {currentLesson?.videoUrl && (
-        <div className="mb-6 rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white bg-black aspect-video flex items-center justify-center relative">
+        <div className="mb-6 max-w-2xl mx-auto w-full rounded-[2.5rem] overflow-hidden shadow-2xl border-4 sm:border-8 border-white bg-black aspect-video flex items-center justify-center relative">
           {getYouTubeEmbedUrl(currentLesson.videoUrl) ? (
             <iframe
               width="100%"
@@ -979,7 +979,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-4 p-1">
+      <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 p-1">
         {currentLesson?.words.map((item, idx) => (
           <div key={idx} className="card-bubble bg-white p-3 sm:p-5 flex flex-col items-center group active:scale-95 cursor-pointer border-white">
             <div className="w-full aspect-square rounded-[2rem] overflow-hidden bg-sky-50 mb-3 border-2 border-sky-100 group-hover:border-aloblue transition-colors">
@@ -1009,7 +1009,7 @@ export default function App() {
         ))}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 pb-4">
+      <div className="mt-6 max-w-md mx-auto w-full grid grid-cols-2 gap-4 pb-4">
         <button 
           onClick={() => currentLesson && startGame(currentLesson)}
           className="bg-emerald-500 btn-alo text-lg shadow-[0_6px_0_#059669]"
@@ -1060,101 +1060,122 @@ export default function App() {
     const difficultyLevel = Math.floor(wordObj.word.length / 3) + 1;
 
     return (
-      <div className="flex flex-col p-4 h-full relative overflow-hidden">
-        <div className="flex justify-between items-center mb-6 relative z-10">
-          <button onClick={() => showModal("Dừng chơi?", `Bé có muốn quay lại trang ${isChallengeMode ? 'chính' : 'bài học'} không?`, "warning", () => setScreen(isChallengeMode ? "setup" : "preview"))} className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-xl transition-all shadow-md">
-            <X className="w-6 h-6" />
+      <div className="flex flex-col p-2 sm:p-6 max-w-6xl mx-auto w-full h-full relative">
+        <div className="flex justify-between items-center mb-4 sm:mb-6 relative z-10 w-full">
+          <button 
+            onClick={() => showModal("Dừng chơi?", `Bé có muốn quay lại trang ${isChallengeMode ? 'chính' : 'bài học'} không?`, "warning", () => setScreen(isChallengeMode ? "setup" : "preview"))} 
+            className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-2xl transition-all shadow-md active:scale-95"
+            title="Đóng"
+          >
+            <X className="w-6 h-6 sm:w-7 sm:h-7" />
           </button>
           
-          <div className="bg-white/90 backdrop-blur-md px-5 py-2 rounded-full shadow-xl border-2 border-sky-100 flex items-center gap-3">
-            <div className={`font-fredoka font-bold ${isChallengeMode ? "text-aloorange" : "text-aloblue"}`}>
+          <div className="bg-white/95 backdrop-blur-md px-6 py-2 sm:py-2.5 rounded-full shadow-xl border-2 border-sky-100 flex items-center gap-3">
+            <div className={`font-fredoka font-bold text-sm sm:text-base ${isChallengeMode ? "text-aloorange" : "text-aloblue"}`}>
                {isChallengeMode ? `THỬ THÁCH ${currentWordIndex + 1}/${totalWords}` : `TỪ ${currentWordIndex + 1}/${totalWords}`}
             </div>
             <div className="flex items-center gap-0.5">
                {[...Array(Math.min(5, difficultyLevel || 0))].map((_, i) => (
-                 <Star key={i} className="w-3.5 h-3.5 fill-aloyellow text-aloyellow" />
+                 <Star key={i} className="w-4 h-4 fill-aloyellow text-aloyellow" />
                ))}
             </div>
           </div>
-          <div className="w-10"></div>
+          <div className="w-11 sm:w-12"></div>
         </div>
 
-        <div className={`flex-1 card-bubble bg-white p-6 flex flex-col items-center justify-center relative transition-all duration-300 border-white shadow-[0_30px_60px_-12px_rgba(0,0,0,0.3)] ${feedback?.type === "success" ? "ring-8 ring-emerald-400" : feedback?.type === "warning" ? "ring-8 ring-aloorange" : ""}`}>
+        <div className={`flex-1 card-bubble bg-white p-4 sm:p-8 lg:p-12 flex flex-col items-center justify-center relative transition-all duration-300 border-white shadow-[0_30px_60px_-12px_rgba(0,0,0,0.25)] rounded-[2.5rem] sm:rounded-[3.5rem] w-full ${feedback?.type === "success" ? "ring-8 ring-emerald-400" : feedback?.type === "warning" ? "ring-8 ring-aloorange" : ""}`}>
           <AnimatePresence>
             {feedback && (
               <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="absolute top-4 left-0 w-full text-center z-10 px-4"
+                className="absolute top-4 sm:top-6 left-0 w-full text-center z-20 px-4"
               >
-                <div className={`inline-block px-6 py-3 rounded-2xl font-bold text-base shadow-lg leading-tight ${feedback.type === "success" ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>
+                <div className={`inline-block px-8 py-3.5 rounded-2xl font-bold text-base sm:text-lg shadow-xl leading-tight ${feedback.type === "success" ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"}`}>
                   {feedback.text}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-[3rem] overflow-hidden shadow-inner mb-6 bg-sky-50 flex items-center justify-center border-4 border-sky-100">
-            <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover" />
-          </div>
+          <div className="w-full flex-1 flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-14 z-10 my-auto py-2">
+            {/* Big Word Image */}
+            <div className="w-56 h-56 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-[360px] lg:h-[360px] rounded-[2.5rem] sm:rounded-[3.5rem] overflow-hidden shadow-2xl bg-sky-50 flex items-center justify-center border-4 sm:border-8 border-sky-100 shrink-0">
+              <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+            </div>
 
-          <h2 className={`font-fredoka font-bold text-slate-800 mb-2 uppercase tracking-tight text-center px-4 break-words leading-none drop-shadow-sm ${getDynamicFontSize(wordObj.word, true)}`}>
-            {wordObj.word}
-          </h2>
-          
-          <div className="flex items-center gap-4 mt-2 mb-8">
-            <button 
-              onClick={() => speakText(wordObj.word)}
-              className="bg-aloblue text-white p-5 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-110"
-              title="Nghe"
-            >
-              <Volume2 className="w-10 h-10" />
-            </button>
-            <button 
-              onClick={() => speakText(wordObj.word, true)}
-              className="bg-aloorange text-white p-5 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-110"
-              title="Rùa"
-            >
-              <Turtle className="w-10 h-10" />
-            </button>
-          </div>
+            {/* Word Content & Controls */}
+            <div className="flex flex-col items-center lg:items-start text-center lg:text-left justify-center flex-1 max-w-xl">
+              <h2 className={`font-fredoka font-bold text-slate-800 uppercase tracking-tight break-words leading-none drop-shadow-sm mb-2 text-4xl sm:text-5xl md:text-6xl ${getDynamicFontSize(wordObj.word, true)}`}>
+                {wordObj.word}
+              </h2>
 
-          <div className="mt-auto relative w-full flex justify-center pb-6">
-            <div className="relative">
-              {isListening && (
-                <motion.div 
-                  initial={{ scale: 0.8, opacity: 0.5 }}
-                  animate={{ scale: 2, opacity: 0 }}
-                  transition={{ repeat: Infinity, duration: 1 }}
-                  className="absolute inset-0 bg-red-400 rounded-full"
-                />
+              {wordObj.phonetic && (
+                <p className="text-base sm:text-lg text-slate-400 font-bold mb-1 opacity-80 italic">{wordObj.phonetic}</p>
+              )}
+              {wordObj.meaning && (
+                <p className="text-base sm:text-lg text-slate-600 font-bold mb-4 bg-sky-50 px-4 py-1.5 rounded-full border border-sky-100 inline-block">{wordObj.meaning}</p>
               )}
               
-              <button 
-                onClick={toggleListening}
-                className={`relative z-10 w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${isListening ? "bg-red-500" : "bg-emerald-500"}`}
-              >
-                <Mic className={`w-12 h-12 text-white ${isListening ? "animate-pulse" : ""}`} />
-              </button>
+              <div className="flex items-center gap-4 my-2 sm:my-3">
+                <button 
+                  onClick={() => speakText(wordObj.word)}
+                  className="bg-aloblue text-white px-6 py-3.5 sm:py-4 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-105 flex items-center gap-2.5 font-fredoka font-bold text-base sm:text-lg"
+                  title="Nghe"
+                >
+                  <Volume2 className="w-7 h-7 sm:w-8 sm:h-8" />
+                  <span>Nghe</span>
+                </button>
+                <button 
+                  onClick={() => speakText(wordObj.word, true)}
+                  className="bg-aloorange text-white px-6 py-3.5 sm:py-4 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-105 flex items-center gap-2.5 font-fredoka font-bold text-base sm:text-lg"
+                  title="Rùa"
+                >
+                  <Turtle className="w-7 h-7 sm:w-8 sm:h-8" />
+                  <span>Đọc chậm</span>
+                </button>
+              </div>
+
+              {/* Mic Status and Button */}
+              <div className="flex flex-col items-center lg:items-start mt-4 sm:mt-6">
+                <div className="relative mb-2">
+                  {isListening && (
+                    <motion.div 
+                      initial={{ scale: 0.8, opacity: 0.5 }}
+                      animate={{ scale: 2, opacity: 0 }}
+                      transition={{ repeat: Infinity, duration: 1 }}
+                      className="absolute inset-0 bg-red-400 rounded-full"
+                    />
+                  )}
+                  
+                  <button 
+                    onClick={toggleListening}
+                    className={`relative z-10 w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${isListening ? "bg-red-500" : "bg-emerald-500"}`}
+                  >
+                    <Mic className={`w-10 h-10 sm:w-12 sm:h-12 text-white ${isListening ? "animate-pulse" : ""}`} />
+                  </button>
+                </div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs sm:text-sm">{micStatus}</p>
+              </div>
             </div>
           </div>
-          
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-4">{micStatus}</p>
 
-          <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none">
+          <div className="absolute inset-x-2 sm:inset-x-4 lg:inset-x-6 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none z-20">
             <button 
               onClick={handlePrevWord}
               disabled={currentWordIndex === 0}
-              className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all pointer-events-auto active:scale-90 ${currentWordIndex === 0 ? "bg-slate-200 text-slate-400" : "bg-white text-aloblue border-4 border-sky-50"}`}
+              className={`w-12 h-12 sm:w-16 sm:h-16 lg:w-18 lg:h-18 rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-2xl transition-all pointer-events-auto active:scale-90 ${currentWordIndex === 0 ? "bg-slate-100 text-slate-300 opacity-30 cursor-not-allowed" : "bg-white text-aloblue border-4 border-sky-100 hover:bg-sky-50"}`}
+              title="Từ trước"
             >
-              <ChevronLeft className="w-10 h-10" />
+              <ChevronLeft className="w-7 h-7 sm:w-9 sm:h-9 lg:w-11 lg:h-11" />
             </button>
             <button 
               onClick={handleNextWord}
-              className="w-14 h-14 rounded-2xl bg-white text-aloblue border-4 border-sky-50 flex items-center justify-center shadow-xl active:scale-90 pointer-events-auto"
+              className="w-12 h-12 sm:w-16 sm:h-16 lg:w-18 lg:h-18 rounded-2xl sm:rounded-3xl bg-white text-aloblue border-4 border-sky-100 flex items-center justify-center shadow-2xl active:scale-90 pointer-events-auto hover:bg-sky-50"
+              title="Từ tiếp theo"
             >
-              <ChevronRight className="w-10 h-10" />
+              <ChevronRight className="w-7 h-7 sm:w-9 sm:h-9 lg:w-11 lg:h-11" />
             </button>
           </div>
         </div>
@@ -1168,45 +1189,51 @@ export default function App() {
     const totalWords = currentLesson.words.length;
 
     return (
-      <div className="flex flex-col p-4 h-full relative overflow-hidden">
-        <div className="flex justify-between items-center mb-6 relative z-10">
-          <button onClick={() => setScreen("preview")} className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-xl transition-all shadow-md">
-            <X className="w-6 h-6" />
+      <div className="flex flex-col p-2 sm:p-6 max-w-6xl mx-auto w-full h-full relative">
+        <div className="flex justify-between items-center mb-4 sm:mb-6 relative z-10 w-full">
+          <button 
+            onClick={() => setScreen("preview")} 
+            className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-white/20 hover:bg-white/40 text-white rounded-2xl transition-all shadow-md active:scale-95"
+            title="Đóng"
+          >
+            <X className="w-6 h-6 sm:w-7 sm:h-7" />
           </button>
-          <div className="bg-white/90 backdrop-blur-md px-6 py-2 rounded-full shadow-xl border-2 border-sky-100">
-            <span className="font-fredoka font-bold text-aloblue uppercase tracking-tight">Câu hỏi {currentWordIndex + 1}/{totalWords}</span>
+          <div className="bg-white/95 backdrop-blur-md px-6 py-2 sm:py-2.5 rounded-full shadow-xl border-2 border-sky-100">
+            <span className="font-fredoka font-bold text-aloblue uppercase tracking-tight text-sm sm:text-base">Câu hỏi {currentWordIndex + 1}/{totalWords}</span>
           </div>
-          <div className="w-10"></div>
+          <div className="w-11 sm:w-12"></div>
         </div>
 
-        <div className="flex-1 flex flex-col items-center gap-6 pt-4 relative z-10">
-          <div className="w-full max-w-xs flex flex-col items-center gap-4">
-            <h3 className="text-3xl font-fredoka font-bold text-white text-center drop-shadow-lg leading-tight uppercase">
-              Bé chọn hình của từ nào?
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 sm:gap-8 relative z-10 w-full my-auto">
+          <div className="w-full max-w-xl flex flex-col items-center gap-3">
+            <h3 className="text-2xl sm:text-3xl lg:text-4xl font-fredoka font-bold text-white text-center drop-shadow-lg leading-tight uppercase">
+              Bé hãy chọn hình của từ:
             </h3>
             
             <button 
               onClick={() => speakText(targetWord.word)}
-              className="card-bubble bg-white p-6 w-full flex flex-col items-center gap-3 border-white active:scale-95 group transition-transform"
+              className="card-bubble bg-white px-8 py-4 sm:py-5 w-full max-w-md flex items-center justify-center gap-4 border-white active:scale-95 group transition-all shadow-xl rounded-3xl cursor-pointer"
             >
-              <div className="w-16 h-16 bg-aloblue text-white rounded-[1.5rem] flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-                <Volume2 className="w-10 h-10" />
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-aloblue text-white rounded-2xl flex items-center justify-center shadow-md group-hover:rotate-12 transition-transform shrink-0">
+                <Volume2 className="w-8 h-8 sm:w-10 sm:h-10" />
               </div>
-              <span className="text-4xl font-fredoka font-bold text-aloblue tracking-tight uppercase leading-none">{targetWord.word}</span>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Bấm để nghe lại</p>
+              <div className="flex flex-col items-start">
+                <span className="text-3xl sm:text-4xl lg:text-5xl font-fredoka font-bold text-aloblue tracking-tight uppercase leading-none">{targetWord.word}</span>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Bấm để nghe lại 🔊</p>
+              </div>
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 w-full max-w-5xl mx-auto">
             {quizOptions.map((option, idx) => (
               <motion.button
                 key={`${currentWordIndex}-${idx}`}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => handleSelectQuizOption(option)}
-                className="aspect-square bg-white rounded-[3rem] p-3 shadow-2xl border-8 border-white overflow-hidden hover:scale-105 active:scale-95 transition-all flex items-center justify-center relative group"
+                className="aspect-square bg-white rounded-[2.5rem] sm:rounded-[3rem] p-3 sm:p-4 shadow-2xl border-4 sm:border-8 border-white hover:border-aloblue/50 active:scale-95 transition-all flex items-center justify-center relative group cursor-pointer"
               >
-                <img src={option.image} alt="Option" className="w-full h-full object-cover rounded-[2rem]" />
+                <img src={option.image} alt="Option" className="w-full h-full object-cover rounded-[1.8rem] sm:rounded-[2.2rem] group-hover:scale-105 transition-transform duration-300" />
               </motion.button>
             ))}
           </div>
@@ -1337,7 +1364,7 @@ export default function App() {
   );
 
   return (
-    <div className="bg-[#00B1FF] font-arial text-slate-800 min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 relative overflow-hidden">
+    <div className="bg-[#00B1FF] font-arial text-slate-800 min-h-screen w-full flex flex-col relative overflow-hidden">
       <PlayfulBackground />
       {loading && (
         <div className="fixed inset-0 bg-sky-400/90 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white">
@@ -1346,54 +1373,61 @@ export default function App() {
         </div>
       )}
 
-      <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[3rem] sm:rounded-[3.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden min-h-[600px] flex flex-col relative z-20 border-4 sm:border-8 border-white/50">
-        <header className="bg-gradient-to-r from-aloblue to-[#0081C9] text-white p-6 flex justify-between items-center z-10 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <h1 className="font-fredoka text-2xl font-bold flex items-center gap-3 relative z-10 tracking-tight drop-shadow-md uppercase">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-xl rotate-3 group-hover:rotate-0 transition-transform">🐱</div>
-            Fun with words
-          </h1>
-          <div className="flex items-center gap-2 relative z-10">
-            {user ? (
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleAdminToggle}
-                  className={`p-2 rounded-2xl transition-all shadow-lg ${isAdmin ? "bg-amber-400 text-white" : "bg-white/20 text-white"}`}
-                  title={isAdmin ? "Tắt Sửa" : "Bật Sửa"}
-                >
-                  <UserIcon className="w-6 h-6" />
-                </button>
-                <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-white shadow-xl">
-                  <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="User" />
+      <div className="w-full flex-1 flex flex-col relative z-20 overflow-hidden">
+        <header className="bg-gradient-to-r from-aloblue to-[#0081C9] text-white px-4 sm:px-8 py-3.5 sm:py-4 flex justify-between items-center z-10 relative overflow-hidden shadow-md">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+          <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
+            <h1 
+              onClick={() => setScreen("setup")}
+              className="font-fredoka text-xl sm:text-2xl font-bold flex items-center gap-3 relative z-10 tracking-tight drop-shadow-md uppercase cursor-pointer select-none"
+            >
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-2xl flex items-center justify-center text-xl sm:text-2xl shadow-xl rotate-3 hover:rotate-0 transition-transform">🐱</div>
+              Fun with words
+            </h1>
+            <div className="flex items-center gap-2 sm:gap-3 relative z-10">
+              {user ? (
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <button 
+                    onClick={handleAdminToggle}
+                    className={`p-2 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl transition-all shadow-md flex items-center gap-1.5 font-bold text-xs sm:text-sm ${isAdmin ? "bg-amber-400 text-white" : "bg-white/20 text-white hover:bg-white/30"}`}
+                    title={isAdmin ? "Tắt Sửa" : "Bật Sửa"}
+                  >
+                    <UserIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="hidden sm:inline">{isAdmin ? "Admin (Bật)" : "Admin"}</span>
+                  </button>
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-white shadow-md">
+                    <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="User" className="w-full h-full object-cover" />
+                  </div>
+                  <button 
+                    onClick={handleLogout}
+                    className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-red-500 text-white hover:bg-red-600 transition-all shadow-md"
+                    title="Đăng xuất"
+                  >
+                    <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
                 </div>
+              ) : (
                 <button 
-                  onClick={handleLogout}
-                  className="p-2 rounded-2xl bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg"
-                  title="Đăng xuất"
+                  onClick={handleLogin}
+                  className="bg-white/20 text-white px-3 sm:px-4 py-2 rounded-xl sm:rounded-2xl hover:bg-white/30 transition-all shadow-md active:scale-95 flex items-center gap-2 font-bold text-xs sm:text-sm"
+                  title="Đăng nhập"
                 >
-                  <X className="w-5 h-5" />
+                  <UserIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Đăng nhập</span>
                 </button>
-              </div>
-            ) : (
-              <button 
-                onClick={handleLogin}
-                className="bg-white/20 text-white p-2 rounded-full hover:bg-sky-50 transition-all shadow-2xl active:scale-95"
-                title="Đăng nhập"
-              >
-                <UserIcon className="w-6 h-6" />
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </header>
 
-        <main className="flex-1 relative overflow-y-auto overflow-x-hidden p-2 sm:p-3 bg-white/30 backdrop-blur-sm">
+        <main className="flex-1 relative overflow-y-auto overflow-x-hidden p-2 sm:p-4 lg:p-6 bg-white/25 backdrop-blur-xs flex flex-col">
           <AnimatePresence mode="wait">
             <motion.div
               key={screen}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="h-full"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="h-full w-full"
             >
               {screen === "setup" && renderSetup()}
               {screen === "create" && renderCreate()}
@@ -1404,14 +1438,14 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
         </main>
-        <div className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-50 border-t border-slate-100 relative overflow-hidden h-24 flex items-center justify-center">
+        <div className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-50 border-t border-slate-100 relative overflow-hidden h-14 sm:h-16 flex items-center justify-center">
           <div className="absolute inset-0 pointer-events-none">
              <div className="absolute top-1/2 -translate-y-1/2 flex items-center gap-6 animate-[chasing_15s_linear_infinite]" style={{ width: 'fit-content' }}>
-                <span className="text-4xl drop-shadow-md">🏃</span>
-                <span className="text-7xl drop-shadow-lg">🦖</span>
+                <span className="text-3xl sm:text-4xl drop-shadow-md">🏃</span>
+                <span className="text-5xl sm:text-6xl drop-shadow-lg">🦖</span>
              </div>
           </div>
-          <span className="relative z-10 bg-white/90 px-6 py-2 rounded-full backdrop-blur-md shadow-md border-2 border-indigo-50 text-indigo-400">BY TAMBMT</span>
+          <span className="relative z-10 bg-white/95 px-5 py-1.5 rounded-full backdrop-blur-md shadow-sm border border-indigo-50 text-indigo-500 font-bold text-xs">BY TAMBMT</span>
         </div>
       </div>
 

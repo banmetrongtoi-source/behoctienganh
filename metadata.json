@@ -3,5 +3,8 @@
   "description": "Ứng dụng học từ vựng tiếng Anh tương tác dành cho bé với nhận diện giọng nói.",
   "requestFramePermissions": [
     "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }
