@@ -31,7 +31,9 @@ import {
   Upload,
   User as UserIcon,
   Check,
-  Sparkles
+  Sparkles,
+  FileText,
+  LayoutGrid
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
@@ -62,6 +64,11 @@ import {
 import { db, auth, storage } from "./firebase";
 import { Lesson, Word, Screen } from "./types";
 import { getMeaningForWord } from "./dictionary";
+import { 
+  playVietnameseSpeech, 
+  stopActiveVietnameseSpeech, 
+  prefetchVietnameseAudio 
+} from "./utils/vietnameseSpeech";
 
 // --- HELPERS ---
 enum OperationType {
@@ -205,46 +212,136 @@ const getYouTubeEmbedUrl = (url: string) => {
   return null;
 };
 
-const parseImportText = (text: string): Word[] => {
-  const lines = text.split("\n").map(l => l.trim());
-  const parsed: Word[] = [];
-  let currentWord: Word | null = null;
+const getYouTubeThumbnail = (url: string) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    return `https://img.youtube.com/vi/${match[2]}/hqdefault.jpg`;
+  }
+  return null;
+};
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) {
-      currentWord = null;
-      continue;
+const isVideoUrl = (url: string): boolean => {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return (
+    u.includes("youtube.com") ||
+    u.includes("youtu.be") ||
+    u.includes("vimeo.com") ||
+    u.endsWith(".mp4") ||
+    u.endsWith(".webm") ||
+    u.endsWith(".ogg") ||
+    u.endsWith(".mov") ||
+    (u.includes("firebasestorage.googleapis.com") && (u.includes("video") || u.includes(".mp4")))
+  );
+};
+
+export interface FormWordItem {
+  id: string;
+  word: string;
+  phonetic: string;
+  meaning: string;
+  videoUrl: string;
+  uploading?: boolean;
+  uploadProgress?: number;
+}
+
+/**
+ * Parses vocabulary strictly adhering to the 4-line structure:
+ * [từ vựng tiếng anh]
+ * [phiên âm]
+ * [nghĩa tiếng việt từ vựng]
+ * [link video/ video upload lên ]
+ */
+const parseImportText = (text: string): Word[] => {
+  if (!text || !text.trim()) return [];
+
+  // Split into blocks separated by blank lines
+  const rawBlocks = text.trim().split(/\n\s*\n+/);
+  const parsed: Word[] = [];
+
+  for (const block of rawBlocks) {
+    const rawLines = block.split("\n").map(l => l.trim()).filter(Boolean);
+    if (rawLines.length === 0) continue;
+
+    // Line 1: [từ vựng tiếng anh]
+    // Line 2: [phiên âm]
+    // Line 3: [nghĩa tiếng việt từ vựng]
+    // Line 4: [link video/ video upload lên ]
+    const word = rawLines[0] || "";
+    let phonetic = rawLines.length >= 2 ? rawLines[1] : "";
+    let meaning = rawLines.length >= 3 ? rawLines[2] : "";
+    let media = rawLines.length >= 4 ? rawLines[3] : "";
+
+    // If only 2 lines provided and second line is not phonetic format, assume it's meaning
+    if (rawLines.length === 2 && !phonetic.startsWith("/") && !phonetic.startsWith("[")) {
+      meaning = phonetic;
+      phonetic = "";
     }
 
-    const isImageUrl = line.startsWith("http://") || line.startsWith("https://") || line.startsWith("data:image/");
-    const isPhonetic = line.startsWith("/") || line.startsWith("[");
+    if (!meaning) {
+      meaning = getMeaningForWord(word) || "";
+    }
 
-    if (isImageUrl) {
-      if (currentWord) currentWord.image = line;
-    } else if (isPhonetic) {
-      if (currentWord) currentWord.phonetic = line;
-    } else {
-      if (!currentWord) {
-        currentWord = {
-          word: line,
-          meaning: getMeaningForWord(line),
-          image: `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`
-        };
-        parsed.push(currentWord);
-      } else if (!currentWord.meaning) {
-        currentWord.meaning = line;
-      } else {
-        currentWord = {
-          word: line,
-          meaning: getMeaningForWord(line),
-          image: `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`
-        };
-        parsed.push(currentWord);
+    const isVideo = isVideoUrl(media);
+    const ytThumb = getYouTubeThumbnail(media);
+    const image = (!isVideo && media.startsWith("http")) 
+      ? media 
+      : ytThumb 
+        ? ytThumb 
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+
+    parsed.push({
+      word,
+      phonetic: phonetic || undefined,
+      meaning: meaning || undefined,
+      image,
+      videoUrl: media || undefined
+    });
+  }
+
+  // Fallback: If user pasted continuous lines without blank lines (4 lines per word)
+  if (parsed.length <= 1 && text.split("\n").filter(l => l.trim()).length >= 4) {
+    const allLines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    if (allLines.length % 4 === 0 && parsed.length === 1 && allLines.length > 4) {
+      const reParsed: Word[] = [];
+      for (let i = 0; i < allLines.length; i += 4) {
+        const word = allLines[i];
+        const phonetic = allLines[i + 1] || "";
+        const meaning = allLines[i + 2] || getMeaningForWord(word) || "";
+        const media = allLines[i + 3] || "";
+        const isVideo = isVideoUrl(media);
+        const ytThumb = getYouTubeThumbnail(media);
+        const image = (!isVideo && media.startsWith("http")) 
+          ? media 
+          : ytThumb 
+            ? ytThumb 
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+
+        reParsed.push({
+          word,
+          phonetic: phonetic || undefined,
+          meaning: meaning || undefined,
+          image,
+          videoUrl: media || undefined
+        });
       }
+      return reParsed;
     }
   }
+
   return parsed;
+};
+
+const wordsToImportText = (words: Word[]): string => {
+  return words.map(w => {
+    const line1 = w.word || "";
+    const line2 = w.phonetic || "";
+    const line3 = w.meaning || "";
+    const line4 = w.videoUrl || (w.image && !w.image.includes("ui-avatars.com") ? w.image : "");
+    return `${line1}\n${line2}\n${line3}\n${line4}`.trimEnd();
+  }).join("\n\n");
 };
 
 const PlayfulBackground = () => (
@@ -306,6 +403,11 @@ export default function App() {
   const [videoUrl, setVideoUrl] = useState("");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [formWords, setFormWords] = useState<FormWordItem[]>([
+    { id: "w-1", word: "", phonetic: "", meaning: "", videoUrl: "" }
+  ]);
+  const [inputTab, setInputTab] = useState<"card" | "text">("card");
+  const [activePlayingWordVideo, setActivePlayingWordVideo] = useState<Word | null>(null);
   const [modal, setModal] = useState<{ title: string; message: string; type: "success" | "warning" | "info" | "error"; onConfirm?: () => void } | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => localStorage.getItem("selectedVoiceURI") || "");
@@ -329,11 +431,35 @@ export default function App() {
     localStorage.setItem("autoReadVietnamese", String(autoReadVietnamese));
   }, [autoReadVietnamese]);
 
+  // Pre-load common Vietnamese vocabulary pronunciation on app start
+  useEffect(() => {
+    prefetchVietnameseAudio([
+      "Quả táo", 
+      "Con chó", 
+      "Con mèo", 
+      "Màu đỏ", 
+      "Con chim", 
+      "Con cá", 
+      "Xin chào các bé đến với Tiếng Anh!"
+    ]);
+  }, []);
+
+  // Pre-fetch Vietnamese pronunciation whenever current lesson changes
+  useEffect(() => {
+    if (currentLesson?.words && currentLesson.words.length > 0) {
+      const meanings = currentLesson.words
+        .map(w => w.meaning || getMeaningForWord(w.word))
+        .filter(Boolean);
+      prefetchVietnameseAudio(meanings);
+    }
+  }, [currentLesson]);
+
   const clearActiveSpeech = () => {
     if (viTimeoutRef.current) {
       clearTimeout(viTimeoutRef.current);
       viTimeoutRef.current = null;
     }
+    stopActiveVietnameseSpeech();
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current.currentTime = 0;
@@ -349,27 +475,7 @@ export default function App() {
     const cleanVi = vietnameseText.trim();
     if (!cleanVi) return;
 
-    const viTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(cleanVi)}`;
-    const viAudio = new Audio(viTtsUrl);
-    viAudio.playbackRate = isSlow ? 0.75 : 0.95;
-    currentAudioRef.current = viAudio;
-
-    const playPromise = viAudio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch((err) => {
-        console.warn("Studio Vietnamese TTS interrupted, falling back to speech synthesis:", err);
-        if ("speechSynthesis" in window) {
-          const utterVi = new SpeechSynthesisUtterance(cleanVi);
-          utterVi.lang = "vi-VN";
-          const allVoices = window.speechSynthesis.getVoices();
-          const viVoice = allVoices.find(v => v.lang.startsWith("vi") || v.lang.includes("vi_VN"));
-          if (viVoice) utterVi.voice = viVoice;
-          utterVi.rate = isSlow ? 0.65 : 0.85;
-          utterVi.pitch = 1.0;
-          window.speechSynthesis.speak(utterVi);
-        }
-      });
-    }
+    playVietnameseSpeech(cleanVi, isSlow);
   };
 
   const updateVoices = () => {
@@ -393,7 +499,12 @@ export default function App() {
   };
 
   const fallbackSpeech = (text: string, isSlow: boolean = false, viMeaning?: string) => {
-    if (!("speechSynthesis" in window)) return;
+    if (!("speechSynthesis" in window)) {
+      if (autoReadVietnamese && viMeaning) {
+        speakVietnamese(viMeaning, isSlow);
+      }
+      return;
+    }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     const allVoices = window.speechSynthesis.getVoices();
@@ -425,7 +536,7 @@ export default function App() {
       utterance.onend = () => {
         viTimeoutRef.current = setTimeout(() => {
           speakVietnamese(viMeaning, isSlow);
-        }, 350);
+        }, 320);
       };
     }
 
@@ -439,33 +550,22 @@ export default function App() {
 
     clearActiveSpeech();
 
-    // High-quality Studio Audio Engine (100% crystal-clear on iOS, Android, PC, Mac)
-    if (voiceEngine === "studio-us" || voiceEngine === "studio-uk") {
-      const lang = voiceEngine === "studio-uk" ? "en-GB" : "en-US";
-      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(cleanText)}`;
-      
-      const audio = new Audio(ttsUrl);
-      audio.playbackRate = isSlow ? 0.65 : 1.0;
-      currentAudioRef.current = audio;
-
-      audio.onended = () => {
-        if (autoReadVietnamese && viMeaning) {
-          viTimeoutRef.current = setTimeout(() => {
-            speakVietnamese(viMeaning, isSlow);
-          }, 350);
-        }
-      };
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn("Studio audio stream playback interrupted, falling back to clean speechSynthesis:", err);
-          fallbackSpeech(cleanText, isSlow, viMeaning);
-        });
+    // Select voice according to user's setting (US or UK)
+    if (voiceEngine === "studio-uk") {
+      const allVoices = "speechSynthesis" in window ? window.speechSynthesis.getVoices() : [];
+      const ukVoice = allVoices.find(v => v.lang.startsWith("en-GB") || v.lang.startsWith("en_GB"));
+      if (ukVoice && selectedVoiceURI !== ukVoice.voiceURI) {
+        setSelectedVoiceURI(ukVoice.voiceURI);
       }
-    } else {
-      fallbackSpeech(cleanText, isSlow, viMeaning);
+    } else if (voiceEngine === "studio-us") {
+      const allVoices = "speechSynthesis" in window ? window.speechSynthesis.getVoices() : [];
+      const usVoice = allVoices.find(v => (v.name.includes("Natural") || v.name.includes("Enhanced") || v.name === "Google US English") && (v.lang.startsWith("en-US") || v.lang.startsWith("en_US")));
+      if (usVoice && selectedVoiceURI !== usVoice.voiceURI) {
+        setSelectedVoiceURI(usVoice.voiceURI);
+      }
     }
+
+    fallbackSpeech(cleanText, isSlow, viMeaning);
   };
 
   const speakWord = (wordObj: Word | { word: string; meaning?: string }, isSlow: boolean = false) => {
@@ -619,14 +719,165 @@ export default function App() {
     }
   };
 
+  const handleWordMediaUpload = (id: string, file: File) => {
+    if (!user) {
+      showModal("Yêu cầu đăng nhập", "Vui lòng đăng nhập để tải video lên!", "warning", handleLogin);
+      return;
+    }
+    const MAX_SIZE = 500 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      showModal("Lỗi", "Tập tin quá lớn! Vui lòng chọn dưới 500MB.", "error");
+      return;
+    }
+
+    setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploading: true, uploadProgress: 0 } : w));
+
+    try {
+      const storageRef = ref(storage, `word_media/${Date.now()}_${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploadProgress: Math.round(progress) } : w));
+        },
+        (error) => {
+          console.error("Word media upload error:", error);
+          showModal("Lỗi", "Không thể tải lên. Vui lòng thử lại.", "error");
+          setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploading: false } : w));
+        },
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          setFormWords(prev => prev.map(w => w.id === id ? { ...w, videoUrl: url, uploading: false } : w));
+          showModal("Thành công", "Đã tải video lên thành công!", "success");
+        }
+      );
+    } catch (err) {
+      console.error(err);
+      setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploading: false } : w));
+      showModal("Lỗi", "Có lỗi xảy ra khi bắt đầu tải lên.", "error");
+    }
+  };
+
+  const handleFormWordChange = (id: string, field: "word" | "phonetic" | "meaning" | "videoUrl", value: string) => {
+    setFormWords(prev => prev.map(w => {
+      if (w.id !== id) return w;
+      const updated = { ...w, [field]: value };
+      if (field === "word" && !w.meaning.trim() && value.trim()) {
+        const autoMeaning = getMeaningForWord(value.trim());
+        if (autoMeaning) updated.meaning = autoMeaning;
+      }
+      return updated;
+    }));
+  };
+
+  const handleAddFormWord = () => {
+    setFormWords(prev => [
+      ...prev,
+      { id: `w_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, word: "", phonetic: "", meaning: "", videoUrl: "" }
+    ]);
+  };
+
+  const handleRemoveFormWord = (id: string) => {
+    setFormWords(prev => prev.filter(w => w.id !== id));
+  };
+
+  const handleSwitchToTextTab = () => {
+    const text = formWords
+      .map(w => `${w.word.trim()}\n${w.phonetic.trim()}\n${w.meaning.trim()}\n${w.videoUrl.trim()}`.trimEnd())
+      .filter(t => t.trim().length > 0)
+      .join("\n\n");
+    setLessonData(text);
+    setInputTab("text");
+  };
+
+  const handleApplyTextToFormWords = () => {
+    const parsed = parseImportText(lessonData);
+    if (parsed.length === 0) {
+      showModal("Lưu ý", "Chưa tìm thấy từ vựng nào hợp lệ trong văn bản.", "warning");
+      return;
+    }
+    setFormWords(parsed.map((w, idx) => ({
+      id: `w_${Date.now()}_${idx}`,
+      word: w.word || "",
+      phonetic: w.phonetic || "",
+      meaning: w.meaning || "",
+      videoUrl: w.videoUrl || (w.image && !w.image.includes("ui-avatars.com") ? w.image : "")
+    })));
+    setInputTab("card");
+    showModal("Thành công", `Đã chuyển đổi thành công ${parsed.length} từ vựng vào danh sách thẻ từ!`, "success");
+  };
+
+  const handleStartCreateLesson = () => {
+    setEditingLessonId(null);
+    setLessonTitle("");
+    setVideoUrl("");
+    setFormWords([
+      { id: `w_${Date.now()}_1`, word: "", phonetic: "", meaning: "", videoUrl: "" }
+    ]);
+    setLessonData("");
+    setInputTab("card");
+    setScreen("create");
+  };
+
+  const handleStartEditLesson = (lesson: Lesson) => {
+    setEditingLessonId(lesson.id!);
+    setLessonTitle(lesson.title);
+    setVideoUrl(lesson.videoUrl || "");
+    const initialFormWords: FormWordItem[] = lesson.words.map((w, idx) => ({
+      id: `w_${Date.now()}_${idx}`,
+      word: w.word || "",
+      phonetic: w.phonetic || "",
+      meaning: w.meaning || "",
+      videoUrl: w.videoUrl || (w.image && !w.image.includes("ui-avatars.com") ? w.image : "")
+    }));
+    setFormWords(initialFormWords.length > 0 ? initialFormWords : [
+      { id: `w_${Date.now()}_1`, word: "", phonetic: "", meaning: "", videoUrl: "" }
+    ]);
+    setLessonData(wordsToImportText(lesson.words));
+    setInputTab("card");
+    setScreen("create");
+  };
+
   const handleSaveLesson = async () => {
     if (!user) {
       return showModal("Yêu cầu đăng nhập", "Vui lòng đăng nhập để thực hiện thao tác này!", "warning", handleLogin);
     }
 
     if (!lessonTitle.trim()) return showModal("Thiếu thông tin", "Vui lòng nhập tên bài học!", "warning");
-    const words = parseImportText(lessonData);
-    if (words.length === 0) return showModal("Lỗi định dạng", "Vui lòng nhập từ vựng theo đúng định dạng!", "error");
+    
+    let words: Word[] = [];
+    if (inputTab === "card") {
+      words = formWords
+        .filter(fw => fw.word.trim().length > 0)
+        .map(fw => {
+          const word = fw.word.trim();
+          const phonetic = fw.phonetic.trim();
+          const meaning = fw.meaning.trim() || getMeaningForWord(word);
+          const media = fw.videoUrl.trim();
+          const isVideo = isVideoUrl(media);
+          const ytThumb = getYouTubeThumbnail(media);
+          const image = (!isVideo && media.startsWith("http")) 
+            ? media 
+            : ytThumb 
+              ? ytThumb 
+              : `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+          return {
+            word,
+            phonetic: phonetic || undefined,
+            meaning: meaning || undefined,
+            image,
+            videoUrl: media || undefined
+          };
+        });
+    } else {
+      words = parseImportText(lessonData);
+    }
+
+    if (words.length === 0) {
+      return showModal("Thiếu từ vựng", "Vui lòng nhập ít nhất một từ vựng cho bài học theo đúng cấu trúc!", "error");
+    }
 
     setLoading(true);
     const path = "lessons";
@@ -850,30 +1101,12 @@ export default function App() {
         </div>
         {isAdmin && (
           <button 
-            onClick={() => { 
-              setEditingLessonId(null); 
-              setLessonTitle(""); 
-              setLessonData(""); 
-              setVideoUrl("");
-              setScreen("create"); 
-            }}
+            onClick={handleStartCreateLesson}
             className="bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-md active:scale-95 flex items-center gap-1"
           >
             <Plus className="w-5 h-5" /> Tạo mới bài học
           </button>
         )}
-      </div>
-
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 sm:p-4 mb-6 flex items-start gap-3 shadow-xs">
-        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 flex-shrink-0">
-          <Sparkles className="w-5 h-5 text-amber-600" />
-        </div>
-        <div>
-          <p className="text-xs sm:text-sm font-bold text-amber-900 mb-0.5">Giọng đọc chuẩn Studio & Tự động dịch nghĩa Tiếng Việt:</p>
-          <p className="text-xs text-amber-800 leading-relaxed">
-            Hệ thống đã đồng bộ phát âm chuẩn bản ngữ (khử rè 100% trên iOS) và <span className="font-bold text-emerald-700">tự động đọc nghĩa tiếng Việt ngay sau từ tiếng Anh</span> cho bé chưa biết chữ dễ dàng hiểu nghĩa. Ba mẹ có thể bấm <span className="font-bold">"Cài đặt giọng đọc cho bé"</span> để điều chỉnh nhé!
-          </p>
-        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 pb-12">
@@ -923,11 +1156,7 @@ export default function App() {
                     <button 
                       onClick={(e) => { 
                         e.stopPropagation(); 
-                        setEditingLessonId(lesson.id!); 
-                        setLessonTitle(lesson.title); 
-                        setLessonData(lesson.words.map(w => `${w.word}${w.phonetic ? `\n${w.phonetic}` : ""}${w.meaning ? `\n${w.meaning}` : ""}\n${w.image}`).join("\n\n"));
-                        setVideoUrl(lesson.videoUrl || "");
-                        setScreen("create"); 
+                        handleStartEditLesson(lesson);
                       }}
                       className="p-1.5 rounded-lg bg-white/20 backdrop-blur-md text-white hover:bg-white hover:text-indigo-600 transition-all"
                     >
@@ -953,51 +1182,62 @@ export default function App() {
   );
 
   const renderCreate = () => (
-    <div className="flex flex-col p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto w-full h-full pb-12">
+    <div className="flex flex-col p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full h-full pb-16">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <button onClick={() => setScreen("setup")} className="text-slate-500 hover:text-indigo-600 transition-colors">
+          <button onClick={() => setScreen("setup")} className="text-slate-500 hover:text-indigo-600 transition-colors p-2 rounded-xl hover:bg-slate-100">
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h2 className="text-2xl font-fredoka font-bold text-indigo-600">{editingLessonId ? "Sửa bài học" : "Tạo bài học mới"}</h2>
+          <h2 className="text-2xl sm:text-3xl font-fredoka font-bold text-indigo-600">
+            {editingLessonId ? "Sửa bài học" : "Tạo bài học mới"}
+          </h2>
         </div>
         {editingLessonId && (
-          <button onClick={handleDeleteLesson} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
-            <Trash2 className="w-6 h-6" />
+          <button 
+            onClick={() => handleDeleteLesson(editingLessonId)} 
+            className="text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm"
+          >
+            <Trash2 className="w-5 h-5" />
+            <span className="hidden sm:inline">Xóa bài</span>
           </button>
         )}
       </div>
 
-      <div className="flex flex-col gap-4 flex-1">
-        <div>
-          <label className="block font-bold text-slate-700 mb-1">Tên bài học</label>
+      <div className="flex flex-col gap-6 flex-1">
+        {/* Lesson Title */}
+        <div className="bg-white p-5 rounded-3xl border-2 border-indigo-100 shadow-sm">
+          <label className="block font-bold text-slate-700 mb-1.5 text-sm sm:text-base">
+            Tên bài học <span className="text-red-500">*</span>
+          </label>
           <input 
             type="text" 
             value={lessonTitle}
             onChange={(e) => setLessonTitle(e.target.value)}
-            placeholder="VD: Động vật đáng yêu" 
-            className="w-full border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors font-semibold"
+            placeholder="VD: Động vật đáng yêu (Animals)" 
+            className="w-full border-2 border-slate-200 rounded-2xl p-3.5 focus:outline-none focus:border-indigo-600 transition-colors font-semibold text-slate-800"
           />
         </div>
 
-        <div>
-          <label className="block font-bold text-slate-700 mb-1 flex items-center gap-2">
-            <Video className="w-4 h-4 text-indigo-600" /> Video bài học (Tùy chọn)
+        {/* Video for the entire lesson (optional) */}
+        <div className="bg-white p-5 rounded-3xl border-2 border-indigo-100 shadow-sm">
+          <label className="block font-bold text-slate-700 mb-1.5 text-sm sm:text-base flex items-center gap-2">
+            <Video className="w-5 h-5 text-indigo-600" /> 
+            <span>Video tổng quan bài học (Tùy chọn)</span>
           </label>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <div className="flex gap-2">
               <input 
                 type="text" 
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Dán link video hoặc tải lên bên dưới" 
-                className="flex-1 border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors text-sm"
+                placeholder="Dán link video YouTube hoặc link mp4..." 
+                className="flex-1 border-2 border-slate-200 rounded-2xl p-3 focus:outline-none focus:border-indigo-600 transition-colors text-sm"
               />
               {videoUrl && (
                 <button 
                   onClick={() => setVideoUrl("")}
-                  className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"
-                  title="Xóa video"
+                  className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-colors"
+                  title="Xóa link video"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
@@ -1010,18 +1250,18 @@ export default function App() {
                 accept="video/*"
                 onChange={handleVideoUpload}
                 className="hidden" 
-                id="video-upload"
+                id="lesson-video-upload"
                 disabled={isUploadingVideo}
               />
               <label 
-                htmlFor="video-upload"
-                className={`flex flex-col items-center justify-center gap-2 p-3 border-2 border-dashed border-indigo-200 rounded-xl cursor-pointer hover:bg-indigo-50 transition-all ${isUploadingVideo ? "opacity-100 cursor-not-allowed bg-indigo-50" : ""}`}
+                htmlFor="lesson-video-upload"
+                className={`flex flex-col items-center justify-center gap-2 p-3.5 border-2 border-dashed border-indigo-200 rounded-2xl cursor-pointer hover:bg-indigo-50/70 transition-all ${isUploadingVideo ? "opacity-100 cursor-not-allowed bg-indigo-50" : ""}`}
               >
                 {isUploadingVideo ? (
                   <div className="w-full flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                      <span className="text-sm font-bold text-indigo-600">Đang tải lên: {uploadProgress}%</span>
+                      <span className="text-sm font-bold text-indigo-600">Đang tải video lên: {uploadProgress}%</span>
                     </div>
                     <div className="w-full h-2 bg-indigo-100 rounded-full overflow-hidden">
                       <motion.div 
@@ -1032,34 +1272,290 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <Upload className="w-5 h-5 text-indigo-600" />
-                    <span className="text-sm font-bold text-indigo-600">Tải video từ máy tính</span>
-                  </>
+                  <div className="flex items-center gap-2 text-indigo-600">
+                    <Upload className="w-4 h-4" />
+                    <span className="text-xs sm:text-sm font-bold">Hoặc tải file video từ máy tính</span>
+                  </div>
                 )}
               </label>
             </div>
           </div>
         </div>
-        
-        <div className="flex-1 flex flex-col">
-          <label className="block font-bold text-slate-700 mb-1">
-            Nhập nhanh từ vựng <br />
-            <span className="text-xs font-normal text-slate-500">(Dòng 1: Từ, Dòng 2: Phiên âm, Dòng 3: Nghĩa, Dòng 4: Link Ảnh)</span>
-          </label>
-          <textarea 
-            value={lessonData}
-            onChange={(e) => setLessonData(e.target.value)}
-            className="w-full flex-1 border-2 border-indigo-100 rounded-xl p-3 focus:outline-none focus:border-indigo-600 transition-colors text-sm font-mono whitespace-pre min-h-[200px]" 
-            placeholder="Apple&#10;/ˈæp.əl/&#10;Táo&#10;https://images.unsplash.com/photo-1560806887-1e4cd0b6faa6?w=200&#10;&#10;Banana&#10;/bəˈnɑː.nə/&#10;Chuối&#10;https://images.unsplash.com/photo-1571771894821-ad990241274d?w=200"
-          />
+
+        {/* Vocabulary Input Section */}
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-indigo-100 shadow-sm flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+            <div>
+              <h3 className="font-fredoka font-bold text-lg text-slate-800">
+                Danh sách từ vựng
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Cấu trúc: [Từ tiếng Anh] • [Phiên âm] • [Nghĩa tiếng Việt] • [Link video/video upload]
+              </p>
+            </div>
+
+            {/* Input Mode Selector */}
+            <div className="flex bg-slate-100 p-1 rounded-2xl self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setInputTab("card")}
+                className={`py-2 px-3.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all ${
+                  inputTab === "card"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-600 hover:text-indigo-600"
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span>Nhập từng từ (Chống nhảy chữ)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSwitchToTextTab}
+                className={`py-2 px-3.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all ${
+                  inputTab === "text"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-600 hover:text-indigo-600"
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>Dán nhanh văn bản (4 dòng)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* TAB 1: FORM CARDS (NON-JUMPING INPUTS) */}
+          {inputTab === "card" && (
+            <div className="flex flex-col gap-4">
+              {formWords.map((item, index) => (
+                <div 
+                  key={item.id} 
+                  className="p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-slate-50/50 hover:border-indigo-200 transition-all flex flex-col gap-3 relative"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                        #{index + 1}
+                      </span>
+                      <span className="font-fredoka font-bold text-slate-700 text-sm">
+                        {item.word.trim() ? item.word : "Từ vựng mới"}
+                      </span>
+                      {item.meaning.trim() && (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-lg hidden sm:inline">
+                          {item.meaning}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {item.word.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => speakWord({ word: item.word, phonetic: item.phonetic, meaning: item.meaning, image: "" })}
+                          className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          title="Nghe phát âm chuẩn"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {formWords.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFormWord(item.id)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Xóa từ này"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4 Inputs with exact structure */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* Line 1: Word */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">
+                        1. Từ vựng tiếng Anh <span className="text-red-500">*</span>
+                      </label>
+                      <input 
+                        type="text"
+                        value={item.word}
+                        onChange={(e) => handleFormWordChange(item.id, "word", e.target.value)}
+                        placeholder="VD: Apple"
+                        className="w-full border-2 border-slate-200 focus:border-indigo-500 bg-white rounded-xl p-2.5 text-sm font-semibold text-slate-800 focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    {/* Line 2: Phonetic */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">
+                        2. Phiên âm IPA
+                      </label>
+                      <input 
+                        type="text"
+                        value={item.phonetic}
+                        onChange={(e) => handleFormWordChange(item.id, "phonetic", e.target.value)}
+                        placeholder="VD: /ˈæp.əl/"
+                        className="w-full border-2 border-slate-200 focus:border-indigo-500 bg-white rounded-xl p-2.5 text-sm text-slate-700 focus:outline-none transition-colors italic"
+                      />
+                    </div>
+
+                    {/* Line 3: Meaning */}
+                    <div className="sm:col-span-2 lg:col-span-1">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">
+                        3. Nghĩa tiếng Việt
+                      </label>
+                      <input 
+                        type="text"
+                        value={item.meaning}
+                        onChange={(e) => handleFormWordChange(item.id, "meaning", e.target.value)}
+                        placeholder="VD: Quả táo"
+                        className="w-full border-2 border-slate-200 focus:border-indigo-500 bg-white rounded-xl p-2.5 text-sm text-slate-700 focus:outline-none transition-colors font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Line 4: Video / Image URL or Upload */}
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <label className="block text-xs font-bold text-slate-600 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Video className="w-3.5 h-3.5 text-indigo-600" />
+                        4. Link video / Video upload lên (hoặc link ảnh minh họa)
+                      </span>
+                      {item.videoUrl && (
+                        <span className="text-[11px] font-bold text-indigo-600 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-500" /> Đã có video/ảnh
+                        </span>
+                      )}
+                    </label>
+
+                    <div className="flex gap-2 items-center">
+                      <input 
+                        type="text"
+                        value={item.videoUrl}
+                        onChange={(e) => handleFormWordChange(item.id, "videoUrl", e.target.value)}
+                        placeholder="Dán link YouTube (https://youtu.be/...) hoặc video mp4 / link ảnh"
+                        className="flex-1 border-2 border-slate-200 focus:border-indigo-500 bg-white rounded-xl p-2.5 text-xs sm:text-sm text-slate-700 focus:outline-none transition-colors"
+                      />
+                      
+                      <label 
+                        className={`cursor-pointer px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-indigo-200 shrink-0 transition-colors ${item.uploading ? "opacity-60 cursor-not-allowed" : ""}`}
+                        title="Tải video trực tiếp từ máy tính lên"
+                      >
+                        <input 
+                          type="file" 
+                          accept="video/*,image/*" 
+                          className="hidden"
+                          disabled={item.uploading}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleWordMediaUpload(item.id, file);
+                          }}
+                        />
+                        {item.uploading ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>{item.uploadProgress}%</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Tải video lên</span>
+                          </>
+                        )}
+                      </label>
+                      {item.videoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleFormWordChange(item.id, "videoUrl", "")}
+                          className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 transition-colors"
+                          title="Xóa link video"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add New Word Button */}
+              <button
+                type="button"
+                onClick={handleAddFormWord}
+                className="w-full py-3.5 border-2 border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50/50 rounded-2xl font-bold text-indigo-600 text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Thêm từ vựng mới (#{formWords.length + 1})</span>
+              </button>
+            </div>
+          )}
+
+          {/* TAB 2: TEXT IMPORT (4-LINE STRUCTURE) */}
+          {inputTab === "text" && (
+            <div className="flex flex-col gap-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 leading-relaxed shadow-sm">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 mb-1 text-sm">
+                  <Info className="w-4 h-4 text-amber-600" />
+                  <span>Quy chuẩn 4 dòng cho mỗi từ vựng:</span>
+                </div>
+                <div className="font-mono text-xs bg-amber-100/70 p-3 rounded-xl border border-amber-200/80 my-2 whitespace-pre leading-5 text-slate-800">
+[từ vựng tiếng anh]
+[phiên âm]
+[nghĩa tiếng việt từ vựng]
+[link video/ video upload lên ]
+                </div>
+                <p className="text-[11px] text-amber-700">
+                  * Mỗi từ vựng cách nhau bằng <strong>1 dòng trống</strong>. Bạn có thể bấm "Chuyển thành danh sách thẻ từ" sau khi dán xong.
+                </p>
+              </div>
+
+              <textarea 
+                value={lessonData}
+                onChange={(e) => setLessonData(e.target.value)}
+                className="w-full border-2 border-indigo-100 rounded-2xl p-4 focus:outline-none focus:border-indigo-600 transition-colors text-sm font-mono whitespace-pre min-h-[260px] bg-slate-50/60 leading-relaxed" 
+                placeholder={`Apple
+/ˈæp.əl/
+Quả táo
+https://www.youtube.com/watch?v=kY3LpYn74zY
+
+Banana
+/bəˈnɑː.nə/
+Quả chuối
+https://www.youtube.com/watch?v=F3zZ5v938`}
+              />
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleApplyTextToFormWords}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm border border-indigo-200 transition-colors flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <span>Chuyển thành danh sách thẻ từ</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* Save button */}
         <button 
           onClick={handleSaveLesson}
-          className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg active:scale-95 mt-2"
+          disabled={loading}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-bold text-lg transition-all shadow-xl active:scale-[0.99] flex items-center justify-center gap-2 mt-2"
         >
-          <Save className="inline-block mr-2 w-5 h-5" /> {editingLessonId ? "Cập nhật bài học" : "Lưu bài học"}
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Đang lưu bài học...</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-5 h-5" />
+              <span>{editingLessonId ? "Cập nhật bài học" : "Lưu bài học"}</span>
+            </>
+          )}
         </button>
       </div>
     </div>
@@ -1109,6 +1605,19 @@ export default function App() {
                 className="w-full aspect-square rounded-[2rem] overflow-hidden bg-sky-50 mb-3 border-2 border-sky-100 group-hover:border-aloblue transition-colors relative"
               >
                 <img src={item.image} alt={item.word} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                {item.videoUrl && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActivePlayingWordVideo(item);
+                    }}
+                    className="absolute bottom-2 right-2 bg-indigo-600/90 hover:bg-indigo-700 text-white px-2 py-1 rounded-xl shadow-lg transition-transform hover:scale-110 flex items-center gap-1 z-10 text-[10px] font-bold"
+                    title="Xem video từ vựng"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Video</span>
+                  </button>
+                )}
               </div>
               <h4 className={`font-bold font-fredoka text-aloblue capitalize w-full text-center break-words leading-tight tracking-tight drop-shadow-sm ${getDynamicFontSize(item.word)}`}>
                 {item.word}
@@ -1277,6 +1786,16 @@ export default function App() {
                   <Turtle className="w-7 h-7 sm:w-8 sm:h-8" />
                   <span>Đọc chậm</span>
                 </button>
+                {wordObj.videoUrl && (
+                  <button 
+                    onClick={() => setActivePlayingWordVideo(wordObj)}
+                    className="bg-indigo-600 text-white px-5 py-3.5 sm:py-4 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-105 flex items-center gap-2 font-fredoka font-bold text-base sm:text-lg"
+                    title="Xem video bài học của từ này"
+                  >
+                    <Film className="w-6 h-6 sm:w-7 sm:h-7" />
+                    <span>Video</span>
+                  </button>
+                )}
               </div>
 
               {/* Mic Status and Button */}
@@ -1450,22 +1969,13 @@ export default function App() {
     const sampleVi = "Xin chào các bé đến với Tiếng Anh!";
 
     if (engine === "studio-us" || engine === "studio-uk") {
-      const lang = engine === "studio-uk" ? "en-GB" : "en-US";
-      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(sampleText)}`;
-      const audio = new Audio(ttsUrl);
-      currentAudioRef.current = audio;
-
-      if (autoReadVietnamese) {
-        audio.onended = () => {
-          viTimeoutRef.current = setTimeout(() => {
-            speakVietnamese(sampleVi);
-          }, 350);
-        };
+      const allVoices = "speechSynthesis" in window ? window.speechSynthesis.getVoices() : [];
+      const isUk = engine === "studio-uk";
+      const matchingVoice = allVoices.find(v => isUk ? (v.lang.startsWith("en-GB") || v.lang.startsWith("en_GB")) : (v.lang.startsWith("en-US") || v.lang.startsWith("en_US")));
+      if (matchingVoice) {
+        setSelectedVoiceURI(matchingVoice.voiceURI);
       }
-
-      audio.play().catch(() => {
-        fallbackSpeech(sampleText, false, autoReadVietnamese ? sampleVi : undefined);
-      });
+      fallbackSpeech(sampleText, false, autoReadVietnamese ? sampleVi : undefined);
     } else {
       if (!("speechSynthesis" in window)) return;
       const utterance = new SpeechSynthesisUtterance(sampleText);
@@ -1480,7 +1990,7 @@ export default function App() {
         utterance.onend = () => {
           viTimeoutRef.current = setTimeout(() => {
             speakVietnamese(sampleVi);
-          }, 350);
+          }, 320);
         };
       }
 
@@ -1521,7 +2031,7 @@ export default function App() {
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-emerald-800 leading-relaxed">
-              <span className="font-bold">Đã khắc phục hoàn toàn trên iOS:</span> Hệ thống sử dụng âm thanh Studio chất lượng cao, khử triệt để hiện tượng rè tiếng hay méo giọng trên iPhone/iPad và đồng bộ chuẩn xác 100%.
+              <span className="font-bold">Đã nâng cấp giọng tiếng Việt chuẩn 100%:</span> Tích hợp bộ phát âm tiếng Việt bản ngữ Google Neural chuẩn xác, tuyệt đối không bị hiện tượng giọng ngoại quốc đọc lơ lớ.
             </div>
           </div>
 
@@ -1538,7 +2048,7 @@ export default function App() {
                     <span className="text-[10px] bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full">Bé chưa biết chữ</span>
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                    Sau khi đọc từ tiếng Anh, hệ thống <strong>đọc luôn nghĩa tiếng Việt</strong> (Ví dụ: <em>"Apple" ➔ "Quả táo"</em>) giúp bé hiểu nghĩa ngay mà chưa cần đọc chữ.
+                    Sau khi đọc từ tiếng Anh, hệ thống <strong>đọc luôn nghĩa tiếng Việt chuẩn người Việt</strong> (Ví dụ: <em>"Apple" ➔ "Quả táo"</em>) giúp bé tiếp thu tự nhiên.
                   </p>
                 </div>
               </div>
@@ -1920,6 +2430,76 @@ export default function App() {
                   className="flex-1 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition-colors"
                 >
                   Xác nhận
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL XEM VIDEO TỪ VỰNG */}
+      <AnimatePresence>
+        {activePlayingWordVideo && activePlayingWordVideo.videoUrl && (
+          <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-3 sm:p-4 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl overflow-hidden max-w-2xl w-full shadow-2xl flex flex-col border-4 border-white"
+            >
+              <div className="flex justify-between items-center p-4 bg-indigo-600 text-white">
+                <div className="flex items-center gap-2">
+                  <Film className="w-5 h-5 text-indigo-200" />
+                  <h3 className="font-fredoka font-bold text-lg capitalize">{activePlayingWordVideo.word}</h3>
+                  {activePlayingWordVideo.meaning && (
+                    <span className="text-xs bg-indigo-500/80 px-2 py-0.5 rounded-full font-medium">
+                      🇻🇳 {activePlayingWordVideo.meaning}
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setActivePlayingWordVideo(null)}
+                  className="p-1 rounded-full hover:bg-white/20 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="aspect-video bg-black flex items-center justify-center relative w-full">
+                {getYouTubeEmbedUrl(activePlayingWordVideo.videoUrl) ? (
+                  <iframe
+                    width="100%"
+                    height="100%"
+                    src={`${getYouTubeEmbedUrl(activePlayingWordVideo.videoUrl)}?autoplay=1`}
+                    title={`Video ${activePlayingWordVideo.word}`}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <video 
+                    src={activePlayingWordVideo.videoUrl} 
+                    controls 
+                    autoPlay
+                    className="w-full h-full"
+                  />
+                )}
+              </div>
+
+              <div className="p-4 bg-slate-50 flex items-center justify-between">
+                <button
+                  onClick={() => speakWord(activePlayingWordVideo)}
+                  className="bg-aloblue text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-sky-600 transition-colors"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  <span>Phát âm</span>
+                </button>
+                <button 
+                  onClick={() => setActivePlayingWordVideo(null)}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-xl font-bold text-sm transition-colors"
+                >
+                  Đóng
                 </button>
               </div>
             </motion.div>

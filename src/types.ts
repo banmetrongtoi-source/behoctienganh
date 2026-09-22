@@ -5,6 +5,7 @@ export interface Word {
   phonetic?: string;
   meaning?: string;
   image: string;
+  videoUrl?: string;
 }
 
 export interface Lesson {
