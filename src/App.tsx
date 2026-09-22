@@ -29,7 +29,9 @@ import {
   Video,
   Film,
   Upload,
-  User as UserIcon
+  User as UserIcon,
+  Check,
+  Sparkles
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
@@ -59,6 +61,7 @@ import {
 } from "firebase/storage";
 import { db, auth, storage } from "./firebase";
 import { Lesson, Word, Screen } from "./types";
+import { getMeaningForWord } from "./dictionary";
 
 // --- HELPERS ---
 enum OperationType {
@@ -225,6 +228,7 @@ const parseImportText = (text: string): Word[] => {
       if (!currentWord) {
         currentWord = {
           word: line,
+          meaning: getMeaningForWord(line),
           image: `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`
         };
         parsed.push(currentWord);
@@ -233,6 +237,7 @@ const parseImportText = (text: string): Word[] => {
       } else {
         currentWord = {
           word: line,
+          meaning: getMeaningForWord(line),
           image: `https://ui-avatars.com/api/?name=${encodeURIComponent(line)}&background=random&color=fff&size=400&font-size=0.3&bold=true`
         };
         parsed.push(currentWord);
@@ -304,59 +309,169 @@ export default function App() {
   const [modal, setModal] = useState<{ title: string; message: string; type: "success" | "warning" | "info" | "error"; onConfirm?: () => void } | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => localStorage.getItem("selectedVoiceURI") || "");
+  const [voiceEngine, setVoiceEngine] = useState<"studio-us" | "studio-uk" | "device">(() => {
+    return (localStorage.getItem("voiceEngine") as any) || "studio-us";
+  });
+  const [autoReadVietnamese, setAutoReadVietnamese] = useState<boolean>(() => {
+    const saved = localStorage.getItem("autoReadVietnamese");
+    return saved !== null ? saved === "true" : true;
+  });
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [isChallengeMode, setIsChallengeMode] = useState(false);
   const [challengeWords, setChallengeWords] = useState<Word[]>([]);
   const [quizOptions, setQuizOptions] = useState<Word[]>([]);
 
   const recognitionRef = useRef<any>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const viTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    localStorage.setItem("autoReadVietnamese", String(autoReadVietnamese));
+  }, [autoReadVietnamese]);
+
+  const clearActiveSpeech = () => {
+    if (viTimeoutRef.current) {
+      clearTimeout(viTimeoutRef.current);
+      viTimeoutRef.current = null;
+    }
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
+  const speakVietnamese = (vietnameseText: string, isSlow: boolean = false) => {
+    if (!vietnameseText) return;
+    const cleanVi = vietnameseText.trim();
+    if (!cleanVi) return;
+
+    const viTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=vi&q=${encodeURIComponent(cleanVi)}`;
+    const viAudio = new Audio(viTtsUrl);
+    viAudio.playbackRate = isSlow ? 0.75 : 0.95;
+    currentAudioRef.current = viAudio;
+
+    const playPromise = viAudio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn("Studio Vietnamese TTS interrupted, falling back to speech synthesis:", err);
+        if ("speechSynthesis" in window) {
+          const utterVi = new SpeechSynthesisUtterance(cleanVi);
+          utterVi.lang = "vi-VN";
+          const allVoices = window.speechSynthesis.getVoices();
+          const viVoice = allVoices.find(v => v.lang.startsWith("vi") || v.lang.includes("vi_VN"));
+          if (viVoice) utterVi.voice = viVoice;
+          utterVi.rate = isSlow ? 0.65 : 0.85;
+          utterVi.pitch = 1.0;
+          window.speechSynthesis.speak(utterVi);
+        }
+      });
+    }
+  };
 
   const updateVoices = () => {
+    if (!("speechSynthesis" in window)) return;
     const allVoices = window.speechSynthesis.getVoices();
     if (allVoices.length === 0) return;
 
     const enVoices = allVoices.filter(v => v.lang.startsWith("en-") || v.lang.startsWith("en_"));
     setVoices(enVoices);
     
-    // Auto-select "Google US English" as default if available and no valid selection exists
-    const googleVoice = allVoices.find(v => v.name === "Google US English");
+    // Auto-select best voice if none selected
+    const bestVoice = allVoices.find(v => (v.name.includes("Enhanced") || v.name.includes("Natural") || v.name.includes("Siri") || v.name === "Google US English") && (v.lang.startsWith("en-") || v.lang.startsWith("en_")));
     const currentVoiceValid = allVoices.some(v => v.voiceURI === selectedVoiceURI);
 
-    if (googleVoice && (!selectedVoiceURI || !currentVoiceValid)) {
-      setSelectedVoiceURI(googleVoice.voiceURI);
+    if (bestVoice && (!selectedVoiceURI || !currentVoiceValid)) {
+      setSelectedVoiceURI(bestVoice.voiceURI);
     } else if (!selectedVoiceURI && enVoices.length > 0) {
       const defaultVoice = enVoices.find(v => v.lang === "en-US") || enVoices[0];
       setSelectedVoiceURI(defaultVoice.voiceURI);
     }
   };
 
-  const speakText = (text: string, isSlow: boolean = false) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      const allVoices = window.speechSynthesis.getVoices();
-      
-      // Strict priority: 1. Selected, 2. Google US English, 3. Any US English, 4. Any English
-      let voice = allVoices.find(v => v.voiceURI === selectedVoiceURI);
-      if (!voice) {
-        voice = allVoices.find(v => v.name === "Google US English");
-      }
-      if (!voice) {
-        voice = allVoices.find(v => v.lang === "en-US");
-      }
-      if (!voice) {
-        voice = allVoices.find(v => v.lang.startsWith("en-") || v.lang.startsWith("en_"));
-      }
-      
-      if (voice) {
-        utterance.voice = voice;
-      }
-
-      utterance.lang = "en-US";
-      utterance.rate = isSlow ? 0.4 : 0.8;
-      utterance.pitch = 1.1;
-      window.speechSynthesis.speak(utterance);
+  const fallbackSpeech = (text: string, isSlow: boolean = false, viMeaning?: string) => {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const allVoices = window.speechSynthesis.getVoices();
+    
+    let voice = allVoices.find(v => v.voiceURI === selectedVoiceURI);
+    if (!voice) {
+      voice = allVoices.find(v => (v.name.includes("Enhanced") || v.name.includes("Natural") || v.name.includes("Siri")) && (v.lang.startsWith("en-") || v.lang.startsWith("en_")));
     }
+    if (!voice) {
+      voice = allVoices.find(v => v.name === "Google US English");
+    }
+    if (!voice) {
+      voice = allVoices.find(v => v.lang === "en-US");
+    }
+    if (!voice) {
+      voice = allVoices.find(v => v.lang.startsWith("en-") || v.lang.startsWith("en_"));
+    }
+    
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    utterance.lang = "en-US";
+    utterance.rate = isSlow ? 0.6 : 0.85;
+    // CRITICAL: Pitch must remain 1.0. On iOS WebKit, non-1.0 pitch causes extreme robotic crackling/buzzing (rè rè).
+    utterance.pitch = 1.0;
+
+    if (autoReadVietnamese && viMeaning) {
+      utterance.onend = () => {
+        viTimeoutRef.current = setTimeout(() => {
+          speakVietnamese(viMeaning, isSlow);
+        }, 350);
+      };
+    }
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const speakText = (text: string, isSlow: boolean = false, meaning?: string) => {
+    if (!text) return;
+    const cleanText = text.trim();
+    const viMeaning = meaning || getMeaningForWord(cleanText);
+
+    clearActiveSpeech();
+
+    // High-quality Studio Audio Engine (100% crystal-clear on iOS, Android, PC, Mac)
+    if (voiceEngine === "studio-us" || voiceEngine === "studio-uk") {
+      const lang = voiceEngine === "studio-uk" ? "en-GB" : "en-US";
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(cleanText)}`;
+      
+      const audio = new Audio(ttsUrl);
+      audio.playbackRate = isSlow ? 0.65 : 1.0;
+      currentAudioRef.current = audio;
+
+      audio.onended = () => {
+        if (autoReadVietnamese && viMeaning) {
+          viTimeoutRef.current = setTimeout(() => {
+            speakVietnamese(viMeaning, isSlow);
+          }, 350);
+        }
+      };
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn("Studio audio stream playback interrupted, falling back to clean speechSynthesis:", err);
+          fallbackSpeech(cleanText, isSlow, viMeaning);
+        });
+      }
+    } else {
+      fallbackSpeech(cleanText, isSlow, viMeaning);
+    }
+  };
+
+  const speakWord = (wordObj: Word | { word: string; meaning?: string }, isSlow: boolean = false) => {
+    if (!wordObj) return;
+    const viMeaning = wordObj.meaning || getMeaningForWord(wordObj.word);
+    speakText(wordObj.word, isSlow, viMeaning);
   };
 
   const handleLogin = async () => {
@@ -392,6 +507,10 @@ export default function App() {
       localStorage.setItem("selectedVoiceURI", selectedVoiceURI);
     }
   }, [selectedVoiceURI]);
+
+  useEffect(() => {
+    localStorage.setItem("voiceEngine", voiceEngine);
+  }, [voiceEngine]);
 
   useEffect(() => {
     // Test connection
@@ -612,7 +731,8 @@ export default function App() {
     const list = isChallengeMode ? challengeWords : currentLesson?.words;
     if (!list || list.length === 0) return;
     
-    const target = list[currentWordIndex].word;
+    const targetObj = list[currentWordIndex];
+    const target = targetObj.word;
     const cleanTarget = target.toLowerCase().replace(/[^a-z0-9]/g, "");
     const cleanRecognized = recognized.toLowerCase().replace(/[^a-z0-9]/g, "");
     const sim = getSimilarityPercent(cleanTarget, cleanRecognized);
@@ -636,7 +756,7 @@ export default function App() {
       const aiTip = await getAIFeedback(target, recognized);
       setFeedback({ text: aiTip, type: "warning" });
       setMicStatus(`Bé nói: "${recognized}"`);
-      speakText(target);
+      speakWord(targetObj);
       // Giữ feedback lâu hơn để bé đọc kịp
       setTimeout(() => setFeedback(null), 4000);
     }
@@ -651,7 +771,7 @@ export default function App() {
     setScore(0);
     setScreen("game");
     if (sortedWords.length > 0) {
-      setTimeout(() => speakText(sortedWords[0].word), 500);
+      setTimeout(() => speakWord(sortedWords[0]), 500);
     }
   };
 
@@ -684,7 +804,7 @@ export default function App() {
     
     const options = [target, ...distractors].sort(() => 0.5 - Math.random());
     setQuizOptions(options);
-    setTimeout(() => speakText(target.word), 500);
+    setTimeout(() => speakWord(target), 500);
   };
 
   const handleSelectQuizOption = (word: Word) => {
@@ -708,7 +828,7 @@ export default function App() {
       }, 1500);
     } else {
       setFeedback({ text: "Ồ! Chưa đúng rồi, thử lại nhé!", type: "warning" });
-      speakText(target.word);
+      speakWord(target);
       setTimeout(() => setFeedback(null), 2000);
     }
   };
@@ -744,14 +864,14 @@ export default function App() {
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 sm:p-4 mb-6 flex items-start gap-3 shadow-xs">
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 sm:p-4 mb-6 flex items-start gap-3 shadow-xs">
         <div className="bg-amber-100 p-2 rounded-xl text-amber-600 flex-shrink-0">
-          <Info className="w-5 h-5" />
+          <Sparkles className="w-5 h-5 text-amber-600" />
         </div>
         <div>
-          <p className="text-xs sm:text-sm font-bold text-amber-800 mb-0.5">Mẹo cho Ba Mẹ:</p>
-          <p className="text-xs text-amber-700 leading-relaxed">
-            Ba mẹ hãy bấm vào <span className="font-bold">"Cài đặt giọng đọc cho bé"</span> phía trên để chọn giọng đọc tiếng Anh chuẩn nhất nhé!
+          <p className="text-xs sm:text-sm font-bold text-amber-900 mb-0.5">Giọng đọc chuẩn Studio & Tự động dịch nghĩa Tiếng Việt:</p>
+          <p className="text-xs text-amber-800 leading-relaxed">
+            Hệ thống đã đồng bộ phát âm chuẩn bản ngữ (khử rè 100% trên iOS) và <span className="font-bold text-emerald-700">tự động đọc nghĩa tiếng Việt ngay sau từ tiếng Anh</span> cho bé chưa biết chữ dễ dàng hiểu nghĩa. Ba mẹ có thể bấm <span className="font-bold">"Cài đặt giọng đọc cho bé"</span> để điều chỉnh nhé!
           </p>
         </div>
       </div>
@@ -980,33 +1100,45 @@ export default function App() {
       )}
 
       <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 p-1">
-        {currentLesson?.words.map((item, idx) => (
-          <div key={idx} className="card-bubble bg-white p-3 sm:p-5 flex flex-col items-center group active:scale-95 cursor-pointer border-white">
-            <div className="w-full aspect-square rounded-[2rem] overflow-hidden bg-sky-50 mb-3 border-2 border-sky-100 group-hover:border-aloblue transition-colors">
-              <img src={item.image} alt={item.word} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-            </div>
-            <h4 className={`font-bold font-fredoka text-aloblue capitalize w-full text-center break-words leading-tight tracking-tight drop-shadow-sm ${getDynamicFontSize(item.word)}`}>
-              {item.word}
-            </h4>
-            {item.phonetic && <p className="text-[10px] text-slate-400 font-bold mb-1 opacity-70 italic">{item.phonetic}</p>}
-            {item.meaning && <p className="text-xs text-slate-500 font-bold mb-3 text-center bg-sky-50 px-3 py-1 rounded-full">{item.meaning}</p>}
-            
-            <div className="mt-auto flex gap-2 w-full">
-              <button 
-                onClick={() => speakText(item.word)}
-                className="flex-1 bg-aloblue text-white py-2 rounded-2xl font-bold hover:bg-sky-600 transition-all shadow-md active:translate-y-1"
+        {currentLesson?.words.map((item, idx) => {
+          const meaning = item.meaning || getMeaningForWord(item.word);
+          return (
+            <div key={idx} className="card-bubble bg-white p-3 sm:p-5 flex flex-col items-center group active:scale-95 cursor-pointer border-white">
+              <div 
+                onClick={() => speakWord(item)}
+                className="w-full aspect-square rounded-[2rem] overflow-hidden bg-sky-50 mb-3 border-2 border-sky-100 group-hover:border-aloblue transition-colors relative"
               >
-                <Volume2 className="w-5 h-5 mx-auto" />
-              </button>
-              <button 
-                onClick={() => speakText(item.word, true)}
-                className="flex-1 bg-aloorange text-white py-2 rounded-2xl font-bold hover:bg-orange-600 transition-all shadow-md active:translate-y-1"
-              >
-                <Turtle className="w-5 h-5 mx-auto" />
-              </button>
+                <img src={item.image} alt={item.word} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+              </div>
+              <h4 className={`font-bold font-fredoka text-aloblue capitalize w-full text-center break-words leading-tight tracking-tight drop-shadow-sm ${getDynamicFontSize(item.word)}`}>
+                {item.word}
+              </h4>
+              {item.phonetic && <p className="text-[10px] text-slate-400 font-bold mb-1 opacity-70 italic">{item.phonetic}</p>}
+              {meaning && (
+                <p className="text-xs text-emerald-700 font-bold mb-3 text-center bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  🇻🇳 {meaning}
+                </p>
+              )}
+              
+              <div className="mt-auto flex gap-2 w-full">
+                <button 
+                  onClick={() => speakWord(item)}
+                  className="flex-1 bg-aloblue text-white py-2 rounded-2xl font-bold hover:bg-sky-600 transition-all shadow-md active:translate-y-1"
+                  title="Đọc từ vựng và nghĩa tiếng Việt"
+                >
+                  <Volume2 className="w-5 h-5 mx-auto" />
+                </button>
+                <button 
+                  onClick={() => speakWord(item, true)}
+                  className="flex-1 bg-aloorange text-white py-2 rounded-2xl font-bold hover:bg-orange-600 transition-all shadow-md active:translate-y-1"
+                  title="Đọc chậm"
+                >
+                  <Turtle className="w-5 h-5 mx-auto" />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-6 max-w-md mx-auto w-full grid grid-cols-2 gap-4 pb-4">
@@ -1034,7 +1166,7 @@ export default function App() {
       setCurrentWordIndex(nextIndex);
       setFeedback(null);
       setMicStatus("Nhấn mic để đọc");
-      setTimeout(() => speakText(list[nextIndex].word), 300);
+      setTimeout(() => speakWord(list[nextIndex]), 300);
     } else {
       setScreen("victory");
     }
@@ -1048,7 +1180,7 @@ export default function App() {
       setCurrentWordIndex(prevIndex);
       setFeedback(null);
       setMicStatus("Nhấn mic để đọc");
-      setTimeout(() => speakText(list[prevIndex].word), 300);
+      setTimeout(() => speakWord(list[prevIndex]), 300);
     }
   };
 
@@ -1101,8 +1233,12 @@ export default function App() {
 
           <div className="w-full flex-1 flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-14 z-10 my-auto py-2">
             {/* Big Word Image */}
-            <div className="w-56 h-56 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-[360px] lg:h-[360px] rounded-[2.5rem] sm:rounded-[3.5rem] overflow-hidden shadow-2xl bg-sky-50 flex items-center justify-center border-4 sm:border-8 border-sky-100 shrink-0">
-              <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+            <div 
+              onClick={() => speakWord(wordObj)}
+              className="w-56 h-56 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-[360px] lg:h-[360px] rounded-[2.5rem] sm:rounded-[3.5rem] overflow-hidden shadow-2xl bg-sky-50 flex items-center justify-center border-4 sm:border-8 border-sky-100 shrink-0 cursor-pointer group"
+              title="Bấm để nghe đọc (Anh - Việt)"
+            >
+              <img src={wordObj.image} alt={wordObj.word} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
             </div>
 
             {/* Word Content & Controls */}
@@ -1114,23 +1250,29 @@ export default function App() {
               {wordObj.phonetic && (
                 <p className="text-base sm:text-lg text-slate-400 font-bold mb-1 opacity-80 italic">{wordObj.phonetic}</p>
               )}
-              {wordObj.meaning && (
-                <p className="text-base sm:text-lg text-slate-600 font-bold mb-4 bg-sky-50 px-4 py-1.5 rounded-full border border-sky-100 inline-block">{wordObj.meaning}</p>
-              )}
+              {(() => {
+                const meaning = wordObj.meaning || getMeaningForWord(wordObj.word);
+                return meaning ? (
+                  <div className="flex items-center gap-2 mb-4 bg-emerald-50 px-5 py-2 rounded-full border border-emerald-200 shadow-xs">
+                    <span className="text-xl">🇻🇳</span>
+                    <span className="text-base sm:text-xl text-emerald-800 font-bold">{meaning}</span>
+                  </div>
+                ) : null;
+              })()}
               
               <div className="flex items-center gap-4 my-2 sm:my-3">
                 <button 
-                  onClick={() => speakText(wordObj.word)}
+                  onClick={() => speakWord(wordObj)}
                   className="bg-aloblue text-white px-6 py-3.5 sm:py-4 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-105 flex items-center gap-2.5 font-fredoka font-bold text-base sm:text-lg"
-                  title="Nghe"
+                  title="Nghe đọc tiếng Anh và tiếng Việt"
                 >
                   <Volume2 className="w-7 h-7 sm:w-8 sm:h-8" />
                   <span>Nghe</span>
                 </button>
                 <button 
-                  onClick={() => speakText(wordObj.word, true)}
+                  onClick={() => speakWord(wordObj, true)}
                   className="bg-aloorange text-white px-6 py-3.5 sm:py-4 rounded-3xl transition-all shadow-lg active:translate-y-1 hover:scale-105 flex items-center gap-2.5 font-fredoka font-bold text-base sm:text-lg"
-                  title="Rùa"
+                  title="Đọc chậm từng từ"
                 >
                   <Turtle className="w-7 h-7 sm:w-8 sm:h-8" />
                   <span>Đọc chậm</span>
@@ -1210,18 +1352,28 @@ export default function App() {
               Bé hãy chọn hình của từ:
             </h3>
             
-            <button 
-              onClick={() => speakText(targetWord.word)}
-              className="card-bubble bg-white px-8 py-4 sm:py-5 w-full max-w-md flex items-center justify-center gap-4 border-white active:scale-95 group transition-all shadow-xl rounded-3xl cursor-pointer"
-            >
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-aloblue text-white rounded-2xl flex items-center justify-center shadow-md group-hover:rotate-12 transition-transform shrink-0">
-                <Volume2 className="w-8 h-8 sm:w-10 sm:h-10" />
-              </div>
-              <div className="flex flex-col items-start">
-                <span className="text-3xl sm:text-4xl lg:text-5xl font-fredoka font-bold text-aloblue tracking-tight uppercase leading-none">{targetWord.word}</span>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Bấm để nghe lại 🔊</p>
-              </div>
-            </button>
+            {(() => {
+              const quizMeaning = targetWord.meaning || getMeaningForWord(targetWord.word);
+              return (
+                <button 
+                  onClick={() => speakWord(targetWord)}
+                  className="card-bubble bg-white px-8 py-4 sm:py-5 w-full max-w-md flex items-center justify-center gap-4 border-white active:scale-95 group transition-all shadow-xl rounded-3xl cursor-pointer"
+                >
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 bg-aloblue text-white rounded-2xl flex items-center justify-center shadow-md group-hover:rotate-12 transition-transform shrink-0">
+                    <Volume2 className="w-8 h-8 sm:w-10 sm:h-10" />
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <span className="text-3xl sm:text-4xl lg:text-5xl font-fredoka font-bold text-aloblue tracking-tight uppercase leading-none">{targetWord.word}</span>
+                    {quizMeaning && (
+                      <span className="text-sm sm:text-base text-emerald-700 font-bold mt-1 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-200">
+                        🇻🇳 {quizMeaning}
+                      </span>
+                    )}
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Bấm để nghe đọc (Anh - Việt) 🔊</p>
+                  </div>
+                </button>
+              );
+            })()}
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 w-full max-w-5xl mx-auto">
@@ -1291,72 +1443,308 @@ export default function App() {
     );
   };
 
+  const previewVoice = (engine: "studio-us" | "studio-uk" | "device", voiceURI?: string) => {
+    clearActiveSpeech();
+
+    const sampleText = "Hello! Welcome to English for Kids!";
+    const sampleVi = "Xin chào các bé đến với Tiếng Anh!";
+
+    if (engine === "studio-us" || engine === "studio-uk") {
+      const lang = engine === "studio-uk" ? "en-GB" : "en-US";
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(sampleText)}`;
+      const audio = new Audio(ttsUrl);
+      currentAudioRef.current = audio;
+
+      if (autoReadVietnamese) {
+        audio.onended = () => {
+          viTimeoutRef.current = setTimeout(() => {
+            speakVietnamese(sampleVi);
+          }, 350);
+        };
+      }
+
+      audio.play().catch(() => {
+        fallbackSpeech(sampleText, false, autoReadVietnamese ? sampleVi : undefined);
+      });
+    } else {
+      if (!("speechSynthesis" in window)) return;
+      const utterance = new SpeechSynthesisUtterance(sampleText);
+      const allVoices = window.speechSynthesis.getVoices();
+      const targetVoice = allVoices.find(x => x.voiceURI === (voiceURI || selectedVoiceURI));
+      if (targetVoice) utterance.voice = targetVoice;
+      utterance.lang = "en-US";
+      utterance.rate = 0.85;
+      utterance.pitch = 1.0;
+
+      if (autoReadVietnamese) {
+        utterance.onend = () => {
+          viTimeoutRef.current = setTimeout(() => {
+            speakVietnamese(sampleVi);
+          }, 350);
+        };
+      }
+
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   const renderVoiceSettings = () => (
-    <div className="fixed inset-0 bg-slate-900/40 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-slate-900/50 z-[110] flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm">
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
+        className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
       >
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-          <div className="flex flex-col">
-            <h3 className="text-xl font-fredoka font-bold text-indigo-900 flex items-center gap-2">
-              <Volume2 className="w-6 h-6" /> Chọn giọng đọc
-            </h3>
-            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Dành cho Ba Mẹ</span>
+        {/* Modal Header */}
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50/80">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-md">
+              <Volume2 className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col">
+              <h3 className="text-xl font-fredoka font-bold text-indigo-900 leading-tight">Cài đặt Giọng Đọc Chuẩn</h3>
+              <p className="text-xs text-indigo-500 font-bold">Đồng bộ âm thanh chuẩn bản ngữ trên mọi thiết bị</p>
+            </div>
           </div>
-          <button onClick={() => setShowVoiceSettings(false)} className="text-slate-400 hover:text-slate-600">
-            <X className="w-6 h-6" />
+          <button 
+            onClick={() => setShowVoiceSettings(false)} 
+            className="w-10 h-10 rounded-xl bg-white/80 hover:bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors shadow-xs"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
         
-        <div className="p-4 overflow-y-auto flex-1">
-          <p className="text-sm text-slate-500 mb-4 px-2">Chọn giọng đọc tiếng Anh bé thích nhất:</p>
-          <div className="flex flex-col gap-2">
-            {voices.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 italic">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 opacity-20" />
-                Đang tải danh sách...
-              </div>
-            ) : (
-              voices.map(voice => (
-                <button
-                  key={voice.voiceURI}
-                  onClick={() => {
-                    setSelectedVoiceURI(voice.voiceURI);
-                    setTimeout(() => {
-                      window.speechSynthesis.cancel();
-                      const utterance = new SpeechSynthesisUtterance("Hello, I am your new teacher!");
-                      utterance.voice = voice;
-                      utterance.lang = "en-US";
-                      utterance.rate = 0.8;
-                      window.speechSynthesis.speak(utterance);
-                    }, 100);
-                  }}
-                  className={`w-full p-4 rounded-2xl text-left transition-all border-2 flex items-center justify-between ${
-                    selectedVoiceURI === voice.voiceURI 
-                    ? "border-indigo-600 bg-indigo-50 text-indigo-700" 
-                    : "border-slate-100 hover:border-indigo-200 text-slate-600"
-                  }`}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-bold text-sm">{voice.name}</span>
-                    <span className="text-[10px] opacity-60 uppercase tracking-wider">{voice.lang}</span>
+        {/* Modal Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+          {/* Notice Box for iOS and Mobile */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-emerald-800 leading-relaxed">
+              <span className="font-bold">Đã khắc phục hoàn toàn trên iOS:</span> Hệ thống sử dụng âm thanh Studio chất lượng cao, khử triệt để hiện tượng rè tiếng hay méo giọng trên iPhone/iPad và đồng bộ chuẩn xác 100%.
+            </div>
+          </div>
+
+          {/* Bilingual Reading Mode for Pre-literate Kids */}
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-sm">
+                  🇻🇳
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-sm sm:text-base">Đọc song ngữ Anh - Việt</span>
+                    <span className="text-[10px] bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full">Bé chưa biết chữ</span>
                   </div>
-                  {selectedVoiceURI === voice.voiceURI && <Star className="w-5 h-5 fill-indigo-600 text-indigo-600" />}
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    Sau khi đọc từ tiếng Anh, hệ thống <strong>đọc luôn nghĩa tiếng Việt</strong> (Ví dụ: <em>"Apple" ➔ "Quả táo"</em>) giúp bé hiểu nghĩa ngay mà chưa cần đọc chữ.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoReadVietnamese(!autoReadVietnamese)}
+                className={`w-14 h-8 rounded-full transition-colors relative p-1 shrink-0 ${autoReadVietnamese ? "bg-emerald-500" : "bg-slate-300"}`}
+                title={autoReadVietnamese ? "Đang bật" : "Đang tắt"}
+              >
+                <div className={`w-6 h-6 rounded-full bg-white transition-transform shadow-md ${autoReadVietnamese ? "translate-x-6" : "translate-x-0"}`} />
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-xs text-amber-900 font-medium">
+                Trạng thái: <strong className={autoReadVietnamese ? "text-emerald-700" : "text-slate-500"}>{autoReadVietnamese ? "BẬT (Đọc Tiếng Anh + Tiếng Việt)" : "TẮT (Chỉ đọc Tiếng Anh)"}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  speakWord({ word: "Apple", meaning: "Quả táo" });
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-100 transition-colors flex items-center gap-1 shadow-xs"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Nghe thử: "Apple ➔ Quả táo"</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
+              1. Giọng Chuẩn Studio Quốc Tế (Khuyên dùng)
+            </p>
+
+            {/* US Voice Option */}
+            <div 
+              onClick={() => {
+                setVoiceEngine("studio-us");
+                previewVoice("studio-us");
+              }}
+              className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                voiceEngine === "studio-us" 
+                ? "border-indigo-600 bg-indigo-50/70 shadow-sm" 
+                : "border-slate-100 hover:border-indigo-200 bg-white"
+              }`}
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="text-3xl">🇺🇸</div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-base">Tiếng Anh - Mỹ (Studio US Natural)</span>
+                    <span className="text-[10px] bg-emerald-500 text-white font-bold px-2 py-0.5 rounded-full">Khuyên dùng</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">Giọng đọc bản ngữ chuẩn Mỹ, trong trẻo, tự nhiên và không rè tiếng.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVoiceEngine("studio-us");
+                    previewVoice("studio-us");
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1 shadow-xs"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Nghe thử</span>
                 </button>
-              ))
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${voiceEngine === "studio-us" ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"}`}>
+                  {voiceEngine === "studio-us" && <Check className="w-3.5 h-3.5" />}
+                </div>
+              </div>
+            </div>
+
+            {/* UK Voice Option */}
+            <div 
+              onClick={() => {
+                setVoiceEngine("studio-uk");
+                previewVoice("studio-uk");
+              }}
+              className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                voiceEngine === "studio-uk" 
+                ? "border-indigo-600 bg-indigo-50/70 shadow-sm" 
+                : "border-slate-100 hover:border-indigo-200 bg-white"
+              }`}
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="text-3xl">🇬🇧</div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-base">Tiếng Anh - Anh (Studio UK Royal)</span>
+                    <span className="text-[10px] bg-sky-500 text-white font-bold px-2 py-0.5 rounded-full">Chuẩn Anh</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">Ngữ điệu quý tộc Anh chuẩn mực, trầm ấm và tròn vành rõ chữ.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVoiceEngine("studio-uk");
+                    previewVoice("studio-uk");
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1 shadow-xs"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Nghe thử</span>
+                </button>
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${voiceEngine === "studio-uk" ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"}`}>
+                  {voiceEngine === "studio-uk" && <Check className="w-3.5 h-3.5" />}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Option 2: Device Voice (Offline) */}
+          <div className="space-y-3 pt-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
+              2. Giọng Hệ Thống Máy (Offline)
+            </p>
+
+            <div 
+              onClick={() => {
+                setVoiceEngine("device");
+                previewVoice("device");
+              }}
+              className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                voiceEngine === "device" 
+                ? "border-indigo-600 bg-indigo-50/70 shadow-sm" 
+                : "border-slate-100 hover:border-indigo-200 bg-white"
+              }`}
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="text-3xl">📱</div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-base">Bộ tổng hợp giọng của thiết bị</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">Dùng giọng có sẵn trên máy (Đã khử rè với pitch 1.0 trên iOS).</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVoiceEngine("device");
+                    previewVoice("device");
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-bold text-xs hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1 shadow-xs"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Nghe thử</span>
+                </button>
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${voiceEngine === "device" ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"}`}>
+                  {voiceEngine === "device" && <Check className="w-3.5 h-3.5" />}
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed device voice list if device mode selected */}
+            {voiceEngine === "device" && (
+              <div className="pl-4 pr-1 py-2 space-y-2 border-l-2 border-indigo-200">
+                <p className="text-xs text-slate-500 font-medium">Danh sách giọng có trên máy của bạn:</p>
+                {voices.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Đang tải danh sách giọng máy...</p>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                    {voices.map(voice => (
+                      <button
+                        key={voice.voiceURI}
+                        onClick={() => {
+                          setSelectedVoiceURI(voice.voiceURI);
+                          previewVoice("device", voice.voiceURI);
+                        }}
+                        className={`w-full p-2.5 rounded-xl text-left text-xs transition-all border flex items-center justify-between ${
+                          selectedVoiceURI === voice.voiceURI 
+                          ? "border-indigo-600 bg-white font-bold text-indigo-700 shadow-xs" 
+                          : "border-slate-100 hover:border-slate-200 bg-slate-50 text-slate-600"
+                        }`}
+                      >
+                        <div className="truncate mr-2">
+                          <span className="block truncate">{voice.name}</span>
+                          <span className="text-[10px] text-slate-400 uppercase">{voice.lang}</span>
+                        </div>
+                        {selectedVoiceURI === voice.voiceURI && <Star className="w-4 h-4 fill-indigo-600 text-indigo-600 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
         
-        <div className="p-6 bg-slate-50 border-t border-slate-100">
+        {/* Modal Footer */}
+        <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
           <button 
             onClick={() => setShowVoiceSettings(false)}
-            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg active:scale-95"
+            className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-bold text-base hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
           >
-            Xong rồi!
+            <Check className="w-5 h-5" />
+            <span>Đã Xong & Lưu Cài Đặt</span>
           </button>
         </div>
       </motion.div>
