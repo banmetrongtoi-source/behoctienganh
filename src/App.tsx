@@ -33,7 +33,8 @@ import {
   Check,
   Sparkles,
   FileText,
-  LayoutGrid
+  LayoutGrid,
+  Image as ImageIcon
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
@@ -242,7 +243,7 @@ export interface FormWordItem {
   word: string;
   phonetic: string;
   meaning: string;
-  videoUrl: string;
+  imageUrl: string;
   uploading?: boolean;
   uploadProgress?: number;
 }
@@ -252,7 +253,7 @@ export interface FormWordItem {
  * [từ vựng tiếng anh]
  * [phiên âm]
  * [nghĩa tiếng việt từ vựng]
- * [link video/ video upload lên ]
+ * [link ảnh của từ vựng tiếng anh]
  */
 const parseImportText = (text: string): Word[] => {
   if (!text || !text.trim()) return [];
@@ -268,11 +269,11 @@ const parseImportText = (text: string): Word[] => {
     // Line 1: [từ vựng tiếng anh]
     // Line 2: [phiên âm]
     // Line 3: [nghĩa tiếng việt từ vựng]
-    // Line 4: [link video/ video upload lên ]
+    // Line 4: [link ảnh của từ vựng tiếng anh]
     const word = rawLines[0] || "";
     let phonetic = rawLines.length >= 2 ? rawLines[1] : "";
     let meaning = rawLines.length >= 3 ? rawLines[2] : "";
-    let media = rawLines.length >= 4 ? rawLines[3] : "";
+    let imageLink = rawLines.length >= 4 ? rawLines[3] : "";
 
     // If only 2 lines provided and second line is not phonetic format, assume it's meaning
     if (rawLines.length === 2 && !phonetic.startsWith("/") && !phonetic.startsWith("[")) {
@@ -284,21 +285,32 @@ const parseImportText = (text: string): Word[] => {
       meaning = getMeaningForWord(word) || "";
     }
 
-    const isVideo = isVideoUrl(media);
-    const ytThumb = getYouTubeThumbnail(media);
-    const image = (!isVideo && media.startsWith("http")) 
-      ? media 
-      : ytThumb 
-        ? ytThumb 
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+    let image = "";
+    let videoUrl: string | undefined = undefined;
 
-    parsed.push({
+    if (imageLink) {
+      if (isVideoUrl(imageLink)) {
+        videoUrl = imageLink;
+        const ytThumb = getYouTubeThumbnail(imageLink);
+        image = ytThumb || `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+      } else if (imageLink.startsWith("http") || imageLink.startsWith("data:")) {
+        image = imageLink;
+      }
+    }
+
+    if (!image) {
+      image = `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+    }
+
+    const item: Word = {
       word,
-      phonetic: phonetic || undefined,
-      meaning: meaning || undefined,
-      image,
-      videoUrl: media || undefined
-    });
+      image
+    };
+    if (phonetic && phonetic.trim()) item.phonetic = phonetic.trim();
+    if (meaning && meaning.trim()) item.meaning = meaning.trim();
+    if (videoUrl && videoUrl.trim()) item.videoUrl = videoUrl.trim();
+
+    parsed.push(item);
   }
 
   // Fallback: If user pasted continuous lines without blank lines (4 lines per word)
@@ -310,22 +322,33 @@ const parseImportText = (text: string): Word[] => {
         const word = allLines[i];
         const phonetic = allLines[i + 1] || "";
         const meaning = allLines[i + 2] || getMeaningForWord(word) || "";
-        const media = allLines[i + 3] || "";
-        const isVideo = isVideoUrl(media);
-        const ytThumb = getYouTubeThumbnail(media);
-        const image = (!isVideo && media.startsWith("http")) 
-          ? media 
-          : ytThumb 
-            ? ytThumb 
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+        const imageLink = allLines[i + 3] || "";
+        let image = "";
+        let videoUrl: string | undefined = undefined;
 
-        reParsed.push({
+        if (imageLink) {
+          if (isVideoUrl(imageLink)) {
+            videoUrl = imageLink;
+            const ytThumb = getYouTubeThumbnail(imageLink);
+            image = ytThumb || `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+          } else if (imageLink.startsWith("http") || imageLink.startsWith("data:")) {
+            image = imageLink;
+          }
+        }
+
+        if (!image) {
+          image = `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+        }
+
+        const repItem: Word = {
           word,
-          phonetic: phonetic || undefined,
-          meaning: meaning || undefined,
-          image,
-          videoUrl: media || undefined
-        });
+          image
+        };
+        if (phonetic && phonetic.trim()) repItem.phonetic = phonetic.trim();
+        if (meaning && meaning.trim()) repItem.meaning = meaning.trim();
+        if (videoUrl && videoUrl.trim()) repItem.videoUrl = videoUrl.trim();
+
+        reParsed.push(repItem);
       }
       return reParsed;
     }
@@ -339,7 +362,7 @@ const wordsToImportText = (words: Word[]): string => {
     const line1 = w.word || "";
     const line2 = w.phonetic || "";
     const line3 = w.meaning || "";
-    const line4 = w.videoUrl || (w.image && !w.image.includes("ui-avatars.com") ? w.image : "");
+    const line4 = (w.image && !w.image.includes("ui-avatars.com")) ? w.image : (w.videoUrl || "");
     return `${line1}\n${line2}\n${line3}\n${line4}`.trimEnd();
   }).join("\n\n");
 };
@@ -719,21 +742,22 @@ export default function App() {
     }
   };
 
-  const handleWordMediaUpload = (id: string, file: File) => {
+  const handleWordImageUpload = (id: string, file: File) => {
+    if (!file) return;
     if (!user) {
-      showModal("Yêu cầu đăng nhập", "Vui lòng đăng nhập để tải video lên!", "warning", handleLogin);
+      showModal("Yêu cầu đăng nhập", "Vui lòng đăng nhập để tải ảnh lên!", "warning", handleLogin);
       return;
     }
-    const MAX_SIZE = 500 * 1024 * 1024;
+    const MAX_SIZE = 50 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      showModal("Lỗi", "Tập tin quá lớn! Vui lòng chọn dưới 500MB.", "error");
+      showModal("Lỗi", "Tập tin quá lớn! Vui lòng chọn dưới 50MB.", "error");
       return;
     }
 
     setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploading: true, uploadProgress: 0 } : w));
 
     try {
-      const storageRef = ref(storage, `word_media/${Date.now()}_${file.name}`);
+      const storageRef = ref(storage, `word_images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
       uploadTask.on(
@@ -743,24 +767,24 @@ export default function App() {
           setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploadProgress: Math.round(progress) } : w));
         },
         (error) => {
-          console.error("Word media upload error:", error);
-          showModal("Lỗi", "Không thể tải lên. Vui lòng thử lại.", "error");
+          console.error("Word image upload error:", error);
+          showModal("Lỗi", "Không thể tải ảnh lên. Vui lòng thử lại.", "error");
           setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploading: false } : w));
         },
         async () => {
           const url = await getDownloadURL(uploadTask.snapshot.ref);
-          setFormWords(prev => prev.map(w => w.id === id ? { ...w, videoUrl: url, uploading: false } : w));
-          showModal("Thành công", "Đã tải video lên thành công!", "success");
+          setFormWords(prev => prev.map(w => w.id === id ? { ...w, imageUrl: url, uploading: false } : w));
+          showModal("Thành công", "Đã tải ảnh lên thành công!", "success");
         }
       );
     } catch (err) {
       console.error(err);
       setFormWords(prev => prev.map(w => w.id === id ? { ...w, uploading: false } : w));
-      showModal("Lỗi", "Có lỗi xảy ra khi bắt đầu tải lên.", "error");
+      showModal("Lỗi", "Có lỗi xảy ra khi bắt đầu tải ảnh lên.", "error");
     }
   };
 
-  const handleFormWordChange = (id: string, field: "word" | "phonetic" | "meaning" | "videoUrl", value: string) => {
+  const handleFormWordChange = (id: string, field: "word" | "phonetic" | "meaning" | "imageUrl", value: string) => {
     setFormWords(prev => prev.map(w => {
       if (w.id !== id) return w;
       const updated = { ...w, [field]: value };
@@ -775,7 +799,7 @@ export default function App() {
   const handleAddFormWord = () => {
     setFormWords(prev => [
       ...prev,
-      { id: `w_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, word: "", phonetic: "", meaning: "", videoUrl: "" }
+      { id: `w_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, word: "", phonetic: "", meaning: "", imageUrl: "" }
     ]);
   };
 
@@ -785,7 +809,7 @@ export default function App() {
 
   const handleSwitchToTextTab = () => {
     const text = formWords
-      .map(w => `${w.word.trim()}\n${w.phonetic.trim()}\n${w.meaning.trim()}\n${w.videoUrl.trim()}`.trimEnd())
+      .map(w => `${w.word.trim()}\n${w.phonetic.trim()}\n${w.meaning.trim()}\n${w.imageUrl.trim()}`.trimEnd())
       .filter(t => t.trim().length > 0)
       .join("\n\n");
     setLessonData(text);
@@ -803,7 +827,7 @@ export default function App() {
       word: w.word || "",
       phonetic: w.phonetic || "",
       meaning: w.meaning || "",
-      videoUrl: w.videoUrl || (w.image && !w.image.includes("ui-avatars.com") ? w.image : "")
+      imageUrl: (w.image && !w.image.includes("ui-avatars.com")) ? w.image : (w.videoUrl || "")
     })));
     setInputTab("card");
     showModal("Thành công", `Đã chuyển đổi thành công ${parsed.length} từ vựng vào danh sách thẻ từ!`, "success");
@@ -814,7 +838,7 @@ export default function App() {
     setLessonTitle("");
     setVideoUrl("");
     setFormWords([
-      { id: `w_${Date.now()}_1`, word: "", phonetic: "", meaning: "", videoUrl: "" }
+      { id: `w_${Date.now()}_1`, word: "", phonetic: "", meaning: "", imageUrl: "" }
     ]);
     setLessonData("");
     setInputTab("card");
@@ -830,10 +854,10 @@ export default function App() {
       word: w.word || "",
       phonetic: w.phonetic || "",
       meaning: w.meaning || "",
-      videoUrl: w.videoUrl || (w.image && !w.image.includes("ui-avatars.com") ? w.image : "")
+      imageUrl: (w.image && !w.image.includes("ui-avatars.com")) ? w.image : (w.videoUrl || "")
     }));
     setFormWords(initialFormWords.length > 0 ? initialFormWords : [
-      { id: `w_${Date.now()}_1`, word: "", phonetic: "", meaning: "", videoUrl: "" }
+      { id: `w_${Date.now()}_1`, word: "", phonetic: "", meaning: "", imageUrl: "" }
     ]);
     setLessonData(wordsToImportText(lesson.words));
     setInputTab("card");
@@ -855,21 +879,33 @@ export default function App() {
           const word = fw.word.trim();
           const phonetic = fw.phonetic.trim();
           const meaning = fw.meaning.trim() || getMeaningForWord(word);
-          const media = fw.videoUrl.trim();
-          const isVideo = isVideoUrl(media);
-          const ytThumb = getYouTubeThumbnail(media);
-          const image = (!isVideo && media.startsWith("http")) 
-            ? media 
-            : ytThumb 
-              ? ytThumb 
-              : `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
-          return {
+          const imgLink = fw.imageUrl.trim();
+          let image = "";
+          let videoUrl: string | undefined = undefined;
+
+          if (imgLink) {
+            if (isVideoUrl(imgLink)) {
+              videoUrl = imgLink;
+              const ytThumb = getYouTubeThumbnail(imgLink);
+              image = ytThumb || `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+            } else if (imgLink.startsWith("http") || imgLink.startsWith("data:")) {
+              image = imgLink;
+            }
+          }
+
+          if (!image) {
+            image = `https://ui-avatars.com/api/?name=${encodeURIComponent(word)}&background=random&color=fff&size=400&font-size=0.3&bold=true`;
+          }
+
+          const wObj: Word = {
             word,
-            phonetic: phonetic || undefined,
-            meaning: meaning || undefined,
-            image,
-            videoUrl: media || undefined
+            image
           };
+          if (phonetic && phonetic.trim()) wObj.phonetic = phonetic.trim();
+          if (meaning && meaning.trim()) wObj.meaning = meaning.trim();
+          if (videoUrl && videoUrl.trim()) wObj.videoUrl = videoUrl.trim();
+
+          return wObj;
         });
     } else {
       words = parseImportText(lessonData);
@@ -879,30 +915,44 @@ export default function App() {
       return showModal("Thiếu từ vựng", "Vui lòng nhập ít nhất một từ vựng cho bài học theo đúng cấu trúc!", "error");
     }
 
+    // Explicitly build clean word maps for Firestore without any undefined fields
+    const sanitizedWords = words.map(w => {
+      const cleanW: Record<string, any> = {
+        word: (w.word || "").trim(),
+        image: (w.image || "").trim()
+      };
+      if (w.phonetic && w.phonetic.trim()) cleanW.phonetic = w.phonetic.trim();
+      if (w.meaning && w.meaning.trim()) cleanW.meaning = w.meaning.trim();
+      if (w.videoUrl && w.videoUrl.trim()) cleanW.videoUrl = w.videoUrl.trim();
+      return cleanW;
+    });
+
     setLoading(true);
     const path = "lessons";
     try {
       if (editingLessonId) {
         const docRef = doc(db, path, editingLessonId);
-        await updateDoc(docRef, {
-          title: lessonTitle,
-          words: words,
-          videoUrl: videoUrl,
+        const updatePayload: Record<string, any> = {
+          title: lessonTitle.trim(),
+          words: sanitizedWords,
+          videoUrl: (videoUrl || "").trim(),
           updatedAt: serverTimestamp()
-        });
+        };
+        await updateDoc(docRef, updatePayload);
         showModal("Thành công!", "Đã cập nhật bài học thành công 🎉", "success", () => {
           setScreen("setup");
           setEditingLessonId(null);
           setVideoUrl("");
         });
       } else {
-        await addDoc(collection(db, path), {
-          title: lessonTitle,
-          words: words,
-          videoUrl: videoUrl,
+        const addPayload: Record<string, any> = {
+          title: lessonTitle.trim(),
+          words: sanitizedWords,
+          videoUrl: (videoUrl || "").trim(),
           creatorId: user?.uid || "anonymous",
           createdAt: serverTimestamp()
-        });
+        };
+        await addDoc(collection(db, path), addPayload);
         showModal("Thành công!", "Đã tạo bài học mới thành công 🎉", "success", () => {
           setScreen("setup");
           setEditingLessonId(null);
@@ -1415,41 +1465,54 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Line 4: Video / Image URL or Upload */}
+                  {/* Line 4: Image URL or Upload */}
                   <div className="flex flex-col gap-1.5 pt-1">
                     <label className="block text-xs font-bold text-slate-600 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <Video className="w-3.5 h-3.5 text-indigo-600" />
-                        4. Link video / Video upload lên (hoặc link ảnh minh họa)
+                        <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                        4. Link ảnh của từ vựng tiếng Anh (hoặc tải ảnh từ máy)
                       </span>
-                      {item.videoUrl && (
-                        <span className="text-[11px] font-bold text-indigo-600 flex items-center gap-1">
-                          <Check className="w-3 h-3 text-emerald-500" /> Đã có video/ảnh
+                      {item.imageUrl && (
+                        <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-500" /> Đã có ảnh minh họa
                         </span>
                       )}
                     </label>
 
                     <div className="flex gap-2 items-center">
+                      {item.imageUrl && (
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-indigo-200 shrink-0 bg-slate-100 flex items-center justify-center">
+                          <img 
+                            src={item.imageUrl} 
+                            alt={item.word || "preview"} 
+                            className="w-full h-full object-cover" 
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+
                       <input 
                         type="text"
-                        value={item.videoUrl}
-                        onChange={(e) => handleFormWordChange(item.id, "videoUrl", e.target.value)}
-                        placeholder="Dán link YouTube (https://youtu.be/...) hoặc video mp4 / link ảnh"
+                        value={item.imageUrl}
+                        onChange={(e) => handleFormWordChange(item.id, "imageUrl", e.target.value)}
+                        placeholder="Dán link ảnh (https://.../apple.jpg) hoặc bấm tải ảnh lên"
                         className="flex-1 border-2 border-slate-200 focus:border-indigo-500 bg-white rounded-xl p-2.5 text-xs sm:text-sm text-slate-700 focus:outline-none transition-colors"
                       />
                       
                       <label 
                         className={`cursor-pointer px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-indigo-200 shrink-0 transition-colors ${item.uploading ? "opacity-60 cursor-not-allowed" : ""}`}
-                        title="Tải video trực tiếp từ máy tính lên"
+                        title="Tải ảnh trực tiếp từ máy tính lên"
                       >
                         <input 
                           type="file" 
-                          accept="video/*,image/*" 
+                          accept="image/*" 
                           className="hidden"
                           disabled={item.uploading}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (file) handleWordMediaUpload(item.id, file);
+                            if (file) handleWordImageUpload(item.id, file);
                           }}
                         />
                         {item.uploading ? (
@@ -1460,16 +1523,16 @@ export default function App() {
                         ) : (
                           <>
                             <Upload className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Tải video lên</span>
+                            <span className="hidden sm:inline">Tải ảnh lên</span>
                           </>
                         )}
                       </label>
-                      {item.videoUrl && (
+                      {item.imageUrl && (
                         <button
                           type="button"
-                          onClick={() => handleFormWordChange(item.id, "videoUrl", "")}
+                          onClick={() => handleFormWordChange(item.id, "imageUrl", "")}
                           className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 transition-colors"
-                          title="Xóa link video"
+                          title="Xóa link ảnh"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -1503,7 +1566,7 @@ export default function App() {
 [từ vựng tiếng anh]
 [phiên âm]
 [nghĩa tiếng việt từ vựng]
-[link video/ video upload lên ]
+[link ảnh của từ vựng tiếng anh]
                 </div>
                 <p className="text-[11px] text-amber-700">
                   * Mỗi từ vựng cách nhau bằng <strong>1 dòng trống</strong>. Bạn có thể bấm "Chuyển thành danh sách thẻ từ" sau khi dán xong.
@@ -1517,12 +1580,12 @@ export default function App() {
                 placeholder={`Apple
 /ˈæp.əl/
 Quả táo
-https://www.youtube.com/watch?v=kY3LpYn74zY
+https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&q=80
 
 Banana
 /bəˈnɑː.nə/
 Quả chuối
-https://www.youtube.com/watch?v=F3zZ5v938`}
+https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&q=80`}
               />
 
               <div className="flex justify-end">
